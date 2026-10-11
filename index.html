@@ -4,6 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
+<script>window.VERSION_JEU = "2026-10-11 20:45";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4717,6 +4718,7 @@ function aide() {
       <li>Dix <b>fers à cheval dorés</b> sont cachés dans le pays. Chacun rapporte 25 pièces.</li>
     </ul>
     <p class="note">Modèle 3D du cheval : <a href="https://sketchfab.com/3d-models/horse-a6f860e43e364619bccb174a1ac7d0c9" target="_blank" rel="noopener" style="color:var(--or)">« Horse »</a> par <a href="https://sketchfab.com/henrysteve973" target="_blank" rel="noopener" style="color:var(--or)">henrysteve973</a>, licence <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener" style="color:var(--or)">CC BY 4.0</a>, allégé pour le jeu (animations triées, textures réduites, couleurs de robe ajoutées). Personnages « Rémy » et « Amy » et leurs animations : <a href="https://www.mixamo.com" target="_blank" rel="noopener" style="color:var(--or)">Mixamo</a> (Adobe).</p>
+    <p class="note">Version du jeu : <b>${window.VERSION_JEU || 'développement'}</b></p>
     <div class="boutons" style="margin-top:14px"><button class="btn or gros" id="jouer">Jouer</button><button class="btn" id="raz">Recommencer une partie</button></div>`);
   $('#jouer').onclick = fermer;
   $('#raz').onclick = () => {
