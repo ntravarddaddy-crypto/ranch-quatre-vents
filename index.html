@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-11 20:45";</script>
+<script>window.VERSION_JEU = "2026-10-11 20:50";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4719,12 +4719,55 @@ function aide() {
     </ul>
     <p class="note">Modèle 3D du cheval : <a href="https://sketchfab.com/3d-models/horse-a6f860e43e364619bccb174a1ac7d0c9" target="_blank" rel="noopener" style="color:var(--or)">« Horse »</a> par <a href="https://sketchfab.com/henrysteve973" target="_blank" rel="noopener" style="color:var(--or)">henrysteve973</a>, licence <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener" style="color:var(--or)">CC BY 4.0</a>, allégé pour le jeu (animations triées, textures réduites, couleurs de robe ajoutées). Personnages « Rémy » et « Amy » et leurs animations : <a href="https://www.mixamo.com" target="_blank" rel="noopener" style="color:var(--or)">Mixamo</a> (Adobe).</p>
     <p class="note">Version du jeu : <b>${window.VERSION_JEU || 'développement'}</b></p>
-    <div class="boutons" style="margin-top:14px"><button class="btn or gros" id="jouer">Jouer</button><button class="btn" id="raz">Recommencer une partie</button></div>`);
+    <div class="boutons" style="margin-top:14px"><button class="btn or gros" id="jouer">Jouer</button><button class="btn" id="b-sauvegardes">Ta partie : fichier, autre appareil</button><button class="btn" id="raz">Recommencer une partie</button></div>`);
   $('#jouer').onclick = fermer;
+  $('#b-sauvegardes').onclick = sauvegardes;
   $('#raz').onclick = () => {
     const b = $('#raz');
     if (b.dataset.sur) { try { localStorage.removeItem(CLE); } catch { } demarrer({ etat: etatNeuf() }); fermer(); toast('Nouvelle partie'); }
     else { b.dataset.sur = '1'; b.textContent = 'Confirmer : tout effacer'; b.style.borderColor = 'var(--rouge)'; }
+  };
+}
+// Ta partie dans un fichier : chaque navigateur, chaque appareil, garde sa propre sauvegarde (localStorage).
+// Pour passer du PC au téléphone : enregistrer ici, copier le fichier, puis le reprendre là-bas.
+// Un texte à copier sert de secours là où un fichier ne peut pas s'enregistrer (page intégrée à Claude).
+function sauvegardes() {
+  sauver();
+  const texte = JSON.stringify(etat), jour = new Date().toISOString().slice(0, 10);
+  const resume = e => `${e.chevaux.length} ${e.chevaux.length > 1 ? 'chevaux' : 'cheval'}, ${e.pieces} pièces, jour ${e.jour ?? 1}, quête ${(e.quete ?? 0) + 1}`;
+  ouvrir(`<div class="pnj">Ta partie</div><h2>Enregistrer ou reprendre</h2>
+    <p>Ta partie actuelle : <b>${resume(etat)}</b>.</p>
+    <p>Chaque appareil garde sa propre sauvegarde. Pour continuer ailleurs (du PC au téléphone par exemple), enregistre ta partie dans un fichier ici, copie ce fichier sur l'autre appareil, puis reprends-la là-bas.</p>
+    <div class="boutons"><button class="btn or" id="exp">Enregistrer ma partie dans un fichier</button>
+      <label class="btn" style="cursor:pointer">Reprendre une partie depuis un fichier<input type="file" id="imp" accept=".json,application/json,text/plain" hidden></label></div>
+    <p id="sauv-msg" class="note" style="color:var(--or)"></p>
+    <h3 class="section">Si le fichier ne s'enregistre pas</h3>
+    <p class="note">Copie ce texte et colle-le dans la même case sur l'autre appareil :</p>
+    <textarea id="sauv-texte" rows="4" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,.25);color:var(--texte);border:1px solid var(--liseré);border-radius:8px;font-size:11px">${texte.replace(/</g, '&lt;')}</textarea>
+    <div class="boutons"><button class="btn" id="copier">Copier le texte</button><button class="btn" id="coller">Reprendre la partie collée ci-dessus</button></div>`);
+  const msg = t => { $('#sauv-msg').textContent = t; };
+  $('#exp').onclick = () => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([texte], { type: 'application/json' }));
+    a.download = `ranch-partie-${jour}.json`; document.body.appendChild(a); a.click(); a.remove();
+    msg(`Fichier « ranch-partie-${jour}.json » enregistré (dans Téléchargements). Si rien ne s'est enregistré, utilise le texte plus bas.`);
+  };
+  $('#copier').onclick = async () => { const z = $('#sauv-texte'); z.select(); try { await navigator.clipboard.writeText(z.value); msg('Texte copié.'); } catch { msg('Sélectionne le texte et copie-le à la main (appui long, Copier).'); } };
+  const reprendre = (brut, bouton) => {
+    let e; try { e = JSON.parse(brut); } catch { msg('Ce n’est pas une partie du Ranch (texte illisible).'); return; }
+    if (!e || e.v !== 1 || !Array.isArray(e.chevaux) || !e.chevaux.length) { msg('Ce n’est pas une partie du Ranch.'); return; }
+    if (bouton && !bouton.dataset.sur) { bouton.dataset.sur = '1'; bouton.textContent = `Confirmer : remplacer la partie actuelle par « ${resume(e)} »`; bouton.style.borderColor = 'var(--rouge)'; bouton._partie = brut; return; }
+    try { localStorage.setItem(CLE, brut); } catch { }
+    demarrer({ etat: e }); fermer(); toast(`Partie reprise : ${resume(e)}`, 'or'); sauver();
+  };
+  $('#coller').onclick = () => reprendre($('#sauv-texte').value.trim(), $('#coller'));
+  $('#imp').onchange = ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    f.text().then(brut => {
+      let e; try { e = JSON.parse(brut); } catch { msg('Ce fichier n’est pas une partie du Ranch.'); return; }
+      if (!e || e.v !== 1 || !Array.isArray(e.chevaux)) { msg('Ce fichier n’est pas une partie du Ranch.'); return; }
+      msg(''); const b = $('#coller'); b.dataset.sur = '1'; b.textContent = `Confirmer : reprendre « ${resume(e)} » (la partie actuelle sera remplacée)`; b.style.borderColor = 'var(--rouge)';
+      $('#sauv-texte').value = brut;
+    });
   };
 }
 
