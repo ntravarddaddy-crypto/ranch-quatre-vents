@@ -174,6 +174,33 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   #invite{bottom:calc(150px + env(safe-area-inset-bottom,0px));font-size:13px}
   #chrono{top:auto;bottom:calc(196px + env(safe-area-inset-bottom,0px))}
 }
+/* téléphone tenu à l'horizontale : écran large mais peu haut. Cartes compactes, menu en une ligne en haut,
+   pour que rien ne passe sous les boutons tactiles (constaté sur l'OPPO de Léa, 800 × 360 px CSS) */
+@media (max-height:520px){
+  #gauche{width:215px;gap:6px}
+  .carton{padding:6px 9px;border-radius:10px}
+  #nom-cheval{font-size:15px}
+  #allure{font-size:10px}
+  .jauge{margin:4px 0 3px;height:7px}
+  .jauge-lbl,.besoins{font-size:10px}
+  .ressources{font-size:11px;gap:8px;margin-top:3px}
+  #quete-texte{display:none}
+  #quete-titre{font-size:13px}
+  #suivi-quete small{font-size:9px}
+  #quete-prog{font-size:10px}
+  #minicarte{width:84px;height:84px}
+  #menu{top:calc(8px + env(safe-area-inset-top,0px));right:110px;width:auto;max-width:calc(100vw - 350px);flex-direction:row;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+  #menu button,#horloge{padding:4px 8px;font-size:12px;border-radius:8px}
+  #menu kbd{display:none}
+  #tactile .croix{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px);gap:5px;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px}
+  #tactile .actions{grid-template-columns:repeat(2,62px);gap:6px;right:calc(12px + env(safe-area-inset-right,0px));bottom:12px}
+  #tactile button{height:46px;font-size:13px}
+  #tactile .saut{height:52px;font-size:16px}
+  #invite{bottom:12px;font-size:13px;max-width:calc(100vw - 420px);white-space:normal;text-align:center}
+  #lecon{bottom:8px;width:min(400px,calc(100vw - 360px))}
+  #chrono{font-size:16px}
+  #voile #panneau{max-height:calc(100% - 4px);padding:12px}
+}
 @media (prefers-reduced-motion:reduce){.toast{animation:none;transition:none}}
 </style>
 
