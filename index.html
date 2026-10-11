@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-11 21:00";</script>
+<script>window.VERSION_JEU = "2026-10-11 22:23";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4761,12 +4761,20 @@ function sauvegardes() {
     <p>Ta partie actuelle : <b>${resume(etat)}</b>.</p>
     <p>Chaque appareil garde sa propre sauvegarde. Pour continuer ailleurs (du PC au téléphone par exemple), enregistre ta partie dans un fichier ici, copie ce fichier sur l'autre appareil, puis reprends-la là-bas.</p>
     <div class="boutons"><button class="btn or" id="exp">Enregistrer ma partie dans un fichier</button>
-      <label class="btn" style="cursor:pointer">Reprendre une partie depuis un fichier<input type="file" id="imp" accept=".json,application/json,text/plain" hidden></label></div>
+      <label class="btn" style="cursor:pointer">Reprendre une partie depuis un fichier<input type="file" id="imp" hidden></label></div>
     <p id="sauv-msg" class="note" style="color:var(--or)"></p>
     <h3 class="section">Si le fichier ne s'enregistre pas</h3>
     <p class="note">Copie ce texte et colle-le dans la même case sur l'autre appareil :</p>
     <textarea id="sauv-texte" rows="4" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,.25);color:var(--texte);border:1px solid var(--liseré);border-radius:8px;font-size:11px">${texte.replace(/</g, '&lt;')}</textarea>
-    <div class="boutons"><button class="btn" id="copier">Copier le texte</button><button class="btn" id="coller">Reprendre la partie collée ci-dessus</button></div>`);
+    <div class="boutons"><button class="btn" id="copier">Copier le texte</button><button class="btn" id="coller">Reprendre la partie collée ci-dessus</button></div>
+    <h3 class="section">Le jeu ne se met pas à jour ?</h3>
+    <p class="note">Avec internet : efface l’ancienne version gardée sur l’appareil et recharge la dernière. Ta partie n’est pas touchée.</p>
+    <div class="boutons"><button class="btn" id="forcer-maj">Forcer la mise à jour</button></div>`);
+  $('#forcer-maj').onclick = async () => {
+    msg('Mise à jour en cours…'); sauver();
+    try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.unregister(); for (const k of await caches.keys()) await caches.delete(k); } catch { }
+    location.replace(location.pathname + '?neuf=' + Date.now());
+  };
   const msg = t => { $('#sauv-msg').textContent = t; };
   $('#exp').onclick = () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([texte], { type: 'application/json' }));
