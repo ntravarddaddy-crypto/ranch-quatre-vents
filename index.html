@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-11 20:50";</script>
+<script>window.VERSION_JEU = "2026-10-11 21:00";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -234,6 +234,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
     <button id="b-sellerie" type="button">Sellerie <kbd>G</kbd></button>
     <button id="b-pied" type="button">Descendre <kbd>M</kbd></button>
     <button id="b-amenager" type="button">Aménager <kbd>B</kbd></button>
+    <button id="b-appel-cours" type="button">Cours <kbd>C</kbd></button>
     <button id="b-aide" type="button">Aide <kbd>?</kbd></button>
   </nav>
   <div id="chrono" class="carton" hidden></div>
@@ -3077,14 +3078,14 @@ function vendreCheval(id, bouton) {
 }
 // ---- Ta maison : dormir, et l'état du ranch en un coup d'œil
 function panneauMaison() {
-  const nuit = etat.heure >= 19.5 || etat.heure < 6, prets = etat.champs.filter(c => c.culture && croissance(c) >= 1).length;
+  const nuit = etat.heure >= 18 || etat.heure < 6, prets = etat.champs.filter(c => c.culture && croissance(c) >= 1).length;
   const ligne = (a, b) => `<div><span>${a}</span><b>${b}</b></div>`;
   ouvrir(`<div class="pnj">Ta maison · jour ${etat.jour}, ${heureTexte(etat.heure)}</div><h2>Chez toi</h2>
     <div class="aide-grille">${ligne('Pièces', etat.pieces)}${ligne('Chevaux', etat.chevaux.length)}${ligne('Enfants en stage', `${etat.stagiaires.length} sur ${CHAMBRES}`)}
       ${ligne('Champs', `${etat.champs.length}${prets ? ` (${prets} à récolter)` : ''}`)}${ligne('Bottes de foin', etat.stock.foin || 0)}${ligne('Sacs d’avoine', etat.stock.avoine || 0)}
       ${ligne('Carottes', etat.carottes)}${ligne('Pommes', etat.pommes)}${ligne('Cours donnés', etat.compteurs.lecons)}${ligne('Concours organisés', etat.compteurs.concours || 0)}</div>
     <p>Les bottes et l’avoine servent aussi à nourrir tes chevaux (E près d’un cheval, à pied) : l’avoine les rassasie et leur donne de l’endurance.</p>
-    <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 19 h 30</small>'}</div>`);
+    <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 18 h</small>'}</div>`);
   $('#dormir').onclick = dormir;
 }
 
@@ -3978,9 +3979,9 @@ function nouveauJour() {
 const jourDeStage = s => etat.jour - s.arrivee + 1;
 const jourDeConcours = s => jourDeStage(s) > STAGE_JOURS - JOURS_CONCOURS && jourDeStage(s) <= STAGE_JOURS;
 function dormir() {
-  if (etat.heure >= 6 && etat.heure < 19.5) { toast('Il est trop tôt pour dormir : reviens après 19 h 30', 'rouge'); return; }
+  if (etat.heure >= 6 && etat.heure < 18) { toast('Il est trop tôt pour dormir : reviens après 18 h', 'rouge'); return; }
   if (lecon || balade || concours) { toast('Termine d’abord le cours, la sortie ou le concours', 'rouge'); return; }
-  if (etat.heure >= 19.5) { etat.jour++; nouveauJour(); }
+  if (etat.heure >= 18) { etat.jour++; nouveauJour(); }
   etat.heure = 7; fermer();
   for (const c of etat.chevaux) if (c.lieu === 'box') { c.faim = Math.max(c.faim ?? 80, 70); c.soif = Math.max(c.soif ?? 80, 70); }
   for (const e of eleves) if (!['part', 'lecon', 'balade', 'concours'].includes(e.etat)) { e.etat = 'gite'; e.chemin = []; e.attente = 0; e.p.g.visible = false; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; }
@@ -3998,17 +3999,17 @@ function panneauGite() {
       <div class="stat"><span>Humeur</span><div class="barre"><i style="width:${s.humeur}%;background:${s.humeur < 30 ? 'var(--rouge)' : s.humeur < 60 ? 'var(--or)' : 'var(--vert)'}"></i></div><b>${Math.round(s.humeur)}</b></div>
       <small>${s.lecons} cours, ${s.balades} balade${s.balades > 1 ? 's' : ''} · ${aujourdhui ? 'déjà monté aujourd’hui' : 'n’a pas encore monté aujourd’hui'}</small></article>`;
   }).join('');
-  const nuit = etat.heure >= 19.5 || etat.heure < 6;
+  const nuit = etat.heure >= 18 || etat.heure < 6;
   ouvrir(`<div class="pnj">Gîte des cavaliers · jour ${etat.jour}, ${heureTexte(etat.heure)}</div><h2>Cinq chambres à l’étage</h2>
     <p>Les stagiaires restent ${STAGE_JOURS} jours avec leur propre cheval. Donne-leur un cours collectif au manège couvert ou une balade sur le sentier du lac au moins une fois par jour : sinon leur humeur baisse. En partant, ils paient leur séjour selon leur humeur.</p>
     <div class="grille">${fiches}</div>
-    <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 19 h 30</small>'}</div>`);
+    <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 18 h</small>'}</div>`);
   $('#dormir').onclick = dormir;
 }
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.etat === 'attend');
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -4102,6 +4103,27 @@ function majLecon(dt) {
 function retourAuBanc(e, x, z) { // après un cours ou une sortie : il dessellé son cheval au box, puis revient
   e.x = x; e.z = z; e.chemin = []; e.attente = 0; e.p.g.visible = true; e.etat = 'revient'; e.p.g.position.set(x, 0, z);
   const b = BOX_POS(e.s.box); etatsStage[e.nom] = { etat: 'box', x: b.x, z: b.z, rot: BOX_ROT(e.s.box), vit: 0 };
+}
+function finirLecon() {
+  const L = lecon, lignes = [];
+  let total = 0;
+  for (const R of L.groupe) {
+    const e = R.e, s = R.s, f = ficheEleve(e.nom), niv = niveauDe(e.niveau);
+    const gain = Math.max(5, Math.round(niv.prix * (0.4 + R.progres / 100 * 0.6) * (0.5 + R.satisf / 200)));
+    total += gain; f.lecons++; s.lecons++; s.dernier = etat.jour;
+    s.humeur = clamp(s.humeur + (R.satisf - 50) * 0.4 + 8, 0, 100);
+    const passage = '';
+    scene.remove(R.m.g); retourAuBanc(e, 5 + R.k * 1.2, MANEGE_C.z1 - 1.5);
+    lignes.push(`<div><span>${e.nom} · ${humeurTexte(R.satisf, e.genre)}${passage ? `, <b style="color:var(--or)">${passage}</b>` : ''}</span><b>${Math.round(R.progres)} % · ${gain} p.</b></div>`);
+  }
+  etat.pieces += total; etat.compteurs.lecons++;
+  lecon = null; $('#lecon').hidden = true;
+  construireChevauxStage(); sonPiece(); sauver();
+  ouvrir(`<div class="pnj">Cours terminé · jour ${etat.jour}</div><h2>${total} pièces gagnées</h2>
+    <div class="aide-grille">${lignes.join('')}</div>
+    <p>Progrès et paiement de chaque cavalier. Le cours compte pour aujourd’hui : demain matin, chacun aura gagné un niveau. Leur humeur de stage suit celle du cours.</p>
+    <button class="btn or gros" id="ok">Parfait</button>`);
+  $('#ok').onclick = fermer;
 }
 // ---- Balade : les stagiaires suivent le joueur à cheval, en file, sur sa trace ; passer par les 8 bornes du sentier
 const bornesVues = new Set();
@@ -4610,7 +4632,7 @@ const interactions = [
   { x: P_INES.x, z: P_INES.z, r: 6, texte: () => 'Dresser ton cheval avec Inès', action: dressage },
   { x: ECURIE.x, z: ECURIE.z - 2.3, r: 2.6, texte: () => 'Choisir la selle et le tapis', action: () => atelier('selle') },
   { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.5, texte: () => 'Entrer au gîte des cavaliers', action: () => panneauGite() },
-  { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 19.5 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 19 h 30)', action: () => dormir() },
+  { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 18 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 18 h)', action: () => dormir() },
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
@@ -4698,9 +4720,9 @@ function aide() {
       <li><b>Manège</b>, au nord-ouest du ranch : Inès et ses exercices de dressage.</li>
       <li><b>Lac</b> au nord-ouest, <b>plaine sauvage</b> au sud-ouest, <b>troncs de cross</b> au sud-est.</li>
       <li><b>Écurie des box</b>, au nord du ranch : chaque cheval a son box ; approche-toi d’une porte pour le soigner.</li>
-      <li><b>Manège couvert</b>, au sud : Inès y donne le dressage. Les <b>enfants en stage</b> attendent au banc devant l’entrée, de 8 h à 19 h : choisis-en jusqu’à cinq (E) pour un cours au manège (ordres 1 à 5), un <b>cours en carrière</b> (ils te suivent et sautent là où tu sautes), une <b>balade</b>, ou leur <b>concours</b>.</li>
+      <li><b>Manège couvert</b>, au sud : Inès y donne le dressage. Les <b>enfants en stage</b> attendent au banc devant l’entrée, de 8 h à 19 h : touche le bouton <b>Cours</b> (ou C), ou parle-leur au banc (E), et choisis-en jusqu’à cinq pour un cours au manège (ordres 1 à 5), un <b>cours en carrière</b> (ils te suivent et sautent là où tu sautes), une <b>balade</b>, ou leur <b>concours</b>.</li>
       <li><b>Gîte des cavaliers</b>, au sud-est : cinq chambres. Chaque enfant reste <b>${STAGE_JOURS} jours</b> avec son propre cheval, logé dans les <b>box des stagiaires</b> (face à l’écurie). Chaque jour où il monte, il gagne un niveau le lendemain ; s’il ne monte pas, il boude. Les ${JOURS_CONCOURS} derniers jours, il court un <b>concours</b> sur le parcours de la carrière (classement, prix pour le ranch). En partant, il paie son séjour selon son humeur.</li>
-      <li><b>Ta maison</b>, au sud du chemin, près du ranch : on y dort jusqu’au matin (après 19 h 30) et on y voit ses réserves. À côté, le <b>comptoir</b> de Rose achète et vend foin, avoine, carottes et pommes, à des prix qui changent chaque jour. <b>Basile</b> rachète aussi tes chevaux.</li>
+      <li><b>Ta maison</b>, au sud du chemin, près du ranch : on y dort jusqu’au matin (après 18 h) et on y voit ses réserves. À côté, le <b>comptoir</b> de Rose achète et vend foin, avoine, carottes et pommes, à des prix qui changent chaque jour. <b>Basile</b> rachète aussi tes chevaux.</li>
       <li><b>Champs</b> : trace-les avec Aménager (B), puis sème-les (E) : foin, avoine ou carottes. Ils poussent en 16 à 30 heures de jeu ; récolte-les quand ils sont dorés. L’avoine rassasie les chevaux et leur donne de l’endurance.</li>
       <li><b>Voiture et van</b>, garés devant le gîte : à pied, E près de la voiture pour conduire (Z, Q, D, Maj pour aller vite, E pour sortir). Mène un cheval en main jusqu’à l’arrière du van et appuie sur E pour le faire monter (deux au plus) ; E au même endroit pour le faire descendre.</li>
       <li><b>La route</b> part du ranch vers l’est : au nord, le <b>concours régional</b> du Domaine des Tilleuls (inscription auprès du juge, trois catégories, cinq cavaliers d’autres ranchs, tu passes en dernier) ; au sud, le <b>marché du village</b> (grains, fruits et légumes, engrais, et Victor qui vend d’autres chevaux chaque jour).</li>
@@ -4794,6 +4816,7 @@ addEventListener('keydown', e => {
   if (l === 'g') atelier();
   if (l === 'm') toucheMonter();
   if (l === 'b') amenager();
+  if (l === 'c') appelCours();
   if (lecon && /^(Digit|Numpad)[1-5]$/.test(e.code)) ordonner(ORDRES[+e.code.slice(-1) - 1][0]);
   if (l === 'f') nourrir(etat.pommes ? 'pomme' : 'carotte');
   if (concours && l === 'v') { vueConcours = !vueConcours; camPrete = false; }
@@ -4809,6 +4832,23 @@ $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
 $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[data-ordre]'); if (b) { e.preventDefault(); ordonner(b.dataset.ordre); } });
 $('#b-aide').onclick = aide;
+$('#b-appel-cours').onclick = e => { e.currentTarget.blur(); appelCours(); };
+// le bouton « Cours » : appeler les enfants d'où que l'on soit (au lieu d'aller les chercher au banc)
+function appelCours() {
+  if (ouvert()) fermer();
+  const h = heureTexte(etat.heure);
+  if (!etat.stagiaires.length) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Aucun enfant en stage</h2><p>Les enfants arrivent entre 9 h et 17 h, quand une chambre du gîte est libre.</p>`); return; }
+  if (!heureDeCours()) {
+    const nuit = etat.heure >= 18 || etat.heure < 6;
+    ouvrir(`<div class="pnj">Cours · jour ${etat.jour}, ${h}</div><h2>Les enfants ${etat.heure < 8 ? 'se préparent' : 'sont au gîte'}</h2>
+      <p>Les cours se donnent de 8 h à 19 h. ${nuit ? 'Dors jusqu’au matin : les enfants sortiront avec leurs chevaux.' : 'Reviens à 8 h.'}</p>
+      ${nuit ? '<div class="boutons"><button class="btn or gros" id="dormir-cours">Dormir jusqu’à 7 h</button></div>' : ''}`);
+    const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
+    return;
+  }
+  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
+  proposerLecon(null);
+}
 if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
   $('#tactile').hidden = false;
   $('#tactile').querySelectorAll('[data-k]').forEach(b => {
