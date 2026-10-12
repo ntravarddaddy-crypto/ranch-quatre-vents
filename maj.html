@@ -10,7 +10,8 @@
     for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
     for (const k of await caches.keys()) await caches.delete(k);
     m.textContent = 'Ancienne version effacée (ta partie est gardée). Ouverture du jeu…';
-    setTimeout(() => location.replace('./index.html?neuf=' + Date.now()), 1200);
+    const q = new URLSearchParams(location.search); q.set('neuf', Date.now()); // garde « partie=… »
+    setTimeout(() => location.replace('./index.html?' + q), 1200);
   } catch (e) { m.textContent = 'Erreur : ' + e; }
 })();
 </script>
