@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 19:06";</script>
+<script>window.VERSION_JEU = "2026-10-12 19:45";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -388,6 +388,7 @@ const GITE = { x: 40, z: 37, hx: 5, hz: 7 };                  // gîte des caval
 const PORTE_GITE = { x: GITE.x - GITE.hx - 1.3, z: GITE.z };
 const PRE_ENFANTS = { x1: 24, x2: 40, z1: -46, z2: -24, porte: { x: 30 } }; // pré des chevaux des stagiaires, à côté de leurs box, barrière au sud
 const REPRO = { x1: -62, x2: -44, z1: -8, z2: 8 };                       // paddock de reproduction
+const ELEVAGE = { x1: -66, x2: -46, z1: 14, z2: 32 };                     // nurserie : poulains et leurs mères (2026-10-12)
 const MAISON = { x: 20, z: 12, hx: 5, hz: 4 };                // ta maison, porte au nord (z = 8), face au chemin
 const PORTE_MAISON = { x: MAISON.x, z: MAISON.z - MAISON.hz - 1.3 };
 const COMPTOIR = { x: 9.5, z: 19 };                           // comptoir du ranch : on y vend récoltes et produits
@@ -1534,6 +1535,20 @@ const texPaves = peindre(256, (c, T) => {
   }
   zoneRegional = regrouper(n0, 160, -125);
 }
+// nurserie : un abri ouvert sur poteaux contre la clôture ouest, un râtelier bas, un abreuvoir (le nom est posé par construirePre)
+{
+  const E = ELEVAGE, g = new THREE.Group(); scene.add(g);
+  const x = E.x1 + 2.2, z = (E.z1 + E.z2) / 2;
+  for (const [dx, dz] of [[-1.6, -3], [1.6, -3], [-1.6, 3], [1.6, 3]]) maille(cylGeo(0.09, 0.1, dx < 0 ? 2.9 : 2.4, 8), MAT.bois, x + dx, (dx < 0 ? 2.9 : 2.4) / 2, z + dz, g);
+  const toit = bloc(3.8, 0.14, 6.6, MAT.toit, x, 2.7, z, g); toit.rotation.z = -0.15;
+  bloc(0.12, 1.6, 6, MAT.bois, x - 1.6, 0.8, z, g);
+  const sol = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 6), MAT.paille); sol.rotation.x = -Math.PI / 2; sol.position.set(x, 0.03, z); sol.receiveShadow = true; g.add(sol);
+  for (const xx of [-0.6, 0.6]) for (const zz of [-0.3, 0.3]) bloc(0.08, 0.9, 0.08, MAT.bois, E.x2 - 4 + xx, 0.45, E.z1 + 2.5 + zz, g);
+  bloc(1.5, 0.08, 0.7, MAT.toit, E.x2 - 4, 0.95, E.z1 + 2.5, g); ovo(0.6, 0.18, 0.25, MAT.paille, E.x2 - 4, 0.7, E.z1 + 2.5, g);
+  const metal = new THREE.MeshStandardMaterial({ color: 0xa9b0b6, roughness: 0.35, metalness: 0.7, side: THREE.DoubleSide });
+  const cuve = maille(new THREE.CylinderGeometry(0.35, 0.35, 1.6, 18, 1, true, 0, Math.PI), metal, E.x2 - 3, 0.45, E.z2 - 2.5, g); cuve.rotation.z = -Math.PI / 2;
+  fusionner(g);
+}
 // paddocks des box : chaque box ouvre au fond sur un petit pré de 6 m, clôturé (le cheval sort et rentre seul)
 function paddocksBox(B, tournee) {
   const g = new THREE.Group(); scene.add(g);
@@ -1608,6 +1623,7 @@ function libre(x, z) {
   for (const s of SEGS_ROUTE) if (distSeg(x, z, s) < 6) return false;
   if (x > PRE_ENFANTS.x1 - 4 && x < PRE_ENFANTS.x2 + 4 && z > PRE_ENFANTS.z1 - 4 && z < PRE_ENFANTS.z2 + 5) return false;
   if (x > REPRO.x1 - 4 && x < REPRO.x2 + 4 && z > REPRO.z1 - 4 && z < REPRO.z2 + 4) return false;
+  if (x > ELEVAGE.x1 - 5 && x < ELEVAGE.x2 + 4 && z > ELEVAGE.z1 - 4 && z < ELEVAGE.z2 + 4) return false;
   if (x > MARCHE.x1 - 12 && x < MARCHE.x2 + 10 && z > MARCHE.z1 - 8 && z < MARCHE.z2 + 14) return false;
   if (x > REGIONAL.x1 - 10 && x < REGIONAL.x2 + 8 && z > REGIONAL.z1 - 8 && z < REGIONAL.z2 + 16) return false;
   if (x > VISITEURS.x1 - 4 && x < VISITEURS.x2 + 4 && z > VISITEURS.z1 - 4 && z < VISITEURS.z2 + 4) return false;
@@ -2789,7 +2805,8 @@ const COUT = { cloture: 3, abreuvoir: 40, ratelier: 30, botte: 10 }; // pièces 
 const NOMS_OBJETS = { abreuvoir: 'Abreuvoir', ratelier: 'Râtelier à foin', botte: 'Botte de foin' };
 const DEMI_PORTE = 1.5;
 const preRepro = () => ({ id: 'repro', nom: 'Paddock de reproduction', ...REPRO, ouverte: false, fixe: true });
-const presDefaut = () => [{ id: 'p1', nom: 'Paddock', x1: ENCLOS.x1, x2: ENCLOS.x2, z1: ENCLOS.z1, z2: ENCLOS.z2, ouverte: false }, preRepro()];
+const preElevage = () => ({ id: 'elevage', nom: 'Nurserie des poulains', ...ELEVAGE, ouverte: false, fixe: true });
+const presDefaut = () => [{ id: 'p1', nom: 'Paddock', x1: ENCLOS.x1, x2: ENCLOS.x2, z1: ENCLOS.z1, z2: ENCLOS.z2, ouverte: false }, preRepro(), preElevage()];
 const objetsDefaut = () => [{ id: 'o1', type: 'abreuvoir', x: -31, z: 14.5 }, { id: 'o2', type: 'ratelier', x: -31, z: 25.5 }];
 const construits = new THREE.Group(); scene.add(construits);
 const portes = [], fixes = []; // barrières (pour les ouvrir) ; objets posés (pour s'y cogner)
@@ -2950,8 +2967,12 @@ function aupresDuCheval(r) {
       <button class="btn" data-a="pomme" ${etat.pommes ? '' : 'disabled'}>Pomme (${etat.pommes})</button>
       <button class="btn" data-a="brosser">Brosser</button>
       <button class="btn" data-a="mener">${mene === r ? 'Lâcher ici' : 'Mener en main'}</button>
-      <button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>
+      ${poulain(c) ? '' : `<button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>`}
     </div>
+    ${poulain(c) ? `<h3 class="section">Élever ${c.nom} · ${etat.jour - c.naissance} jour${etat.jour - c.naissance > 1 ? 's' : ''} (adulte à ${AGE_ADULTE})</h3>
+      <div class="jauge" style="margin:4px 0 8px"><i style="width:${c.elevage || 0}%;background:var(--or)"></i></div>
+      <p class="note">Points d’élevage : ${c.elevage || 0} %. Bien élevé, il gagnera jusqu’à 3 niveaux de plus en devenant adulte.</p>
+      <div class="boutons">${SOINS_POULAIN.map(([k, l]) => { const reste = Math.ceil(90 - (maintenant() - (derniersSoins[c.id + 'p' + k] ?? -999))); return `<button class="btn ${reste > 0 ? '' : 'or'}" data-poulain="${k}" ${reste > 0 ? 'disabled' : ''}>${l}${reste > 0 ? ` · ${reste} s` : ''}</button>`; }).join('')}</div>` : ''}
     <h3 class="section">Licol${c.licol && c.licolC == null ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
     <div class="boutons">${mesLicols().map(k => `<button class="btn ${c.licol === k ? 'or' : ''}" data-licol="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(LICOLS[k].c)}"></span>${LICOLS[k].nom}</button>`).join('')}
       ${c.licol ? '<button class="btn" data-licol="">Enlever le licol</button>' : ''}</div>
@@ -2970,6 +2991,7 @@ function aupresDuCheval(r) {
     c.couverture = k; c.couvC = null; if (k) toast(`${c.nom} a sa couverture ${COUVERTURES[k].nom.toLowerCase()}`); else toast(`Couverture enlevée à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
   });
+  $('#contenu').querySelectorAll('[data-poulain]').forEach(b => b.onclick = () => soignerPoulain(c, b.dataset.poulain, r));
   $('#contenu').querySelectorAll('[data-licol]').forEach(b => b.onclick = () => {
     c.licol = b.dataset.licol || null; c.licolC = null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
@@ -3046,7 +3068,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -3288,7 +3310,7 @@ function comptoir() {
   });
 }
 // prix de rachat d'un cheval par Basile : la moitié du prix de sa race, plus ses progrès
-const prixVente = c => Math.round((RACES[c.race]?.prix || 120) * 0.5 + 15 * STATS.reduce((t, [k]) => t + c.stats[k].niv, 0));
+const prixVente = c => Math.round(((RACES[c.race]?.prix || 120) * 0.5 + 15 * STATS.reduce((t, [k]) => t + c.stats[k].niv, 0)) * (1 + (c.elevage || 0) / 250));
 function vendreCheval(id, bouton) {
   const c = etat.chevaux.find(h => h.id === id); if (!c) return;
   if (etat.chevaux.length < 2) { toast('Garde au moins un cheval !', 'rouge'); return; }
@@ -3649,7 +3671,7 @@ function reproduction() {
     if (j.pleine && etat.jour >= j.pleine.terme) naissance(j);
     else if (!j.pleine && (j.repos ?? 0) <= etat.jour && etalon && dans.includes(j)) { j.pleine = { pere: etalon.id, terme: etat.jour + GESTATION }; setTimeout(() => toast(`${j.nom} attend un poulain de ${etalon.nom} : naissance dans ${GESTATION} jours`, 'or'), 2200); }
   }
-  for (const c of etat.chevaux) if (c.naissance) { const age = etat.jour - c.naissance; c.taille = c.tailleAdulte * (0.55 + 0.45 * Math.min(1, age / AGE_ADULTE)); if (age === AGE_ADULTE) setTimeout(() => toast(`${c.nom} est adulte : tu peux le monter`, 'or'), 3000); }
+  for (const c of etat.chevaux) if (c.naissance) { const age = etat.jour - c.naissance; c.taille = c.tailleAdulte * (0.55 + 0.45 * Math.min(1, age / AGE_ADULTE)); if (age >= AGE_ADULTE && !c.eleve && (age === AGE_ADULTE || c.elevage != null)) devenirAdulte(c); }
 }
 // robes mélangées : une couleur entre celles des parents, gardée dans etat.robes et ajoutée à ROBES au chargement
 const corpsDe = r => r.taches ?? r.points ?? r.corps;
@@ -3665,15 +3687,35 @@ function robeDuPoulain(m, p) {
   (etat.robes ||= {})[cle] = def; ROBES[cle] = def;
   return cle;
 }
+// ---- Élevage : à la nurserie, on s'occupe du poulain (biberon, jeu, licol, promenade) ; ses points d'élevage
+// (c.elevage, 0 à 100) lui donnent jusqu'à 3 niveaux de plus quand il devient adulte, et le font valoir plus cher
+const SOINS_POULAIN = [['biberon', 'Lui donner le biberon', 12], ['jouer', 'Jouer avec lui', 10], ['licol', 'L’habituer au licol', 14], ['pieds', 'Lui apprendre à donner les pieds', 12], ['caresses', 'Le caresser et le brosser', 8]];
+const poulain = c => !!c.naissance && !adulte(c);
+function devenirAdulte(c) {
+  c.eleve = true;
+  const n = Math.floor((c.elevage || 0) / 34) + ((c.elevage || 0) >= 100 ? 1 : 0), gagne = [];
+  for (let i = 0; i < n; i++) { const k = pick(STATS.filter(([s]) => c.stats[s].niv < 10))?.[0]; if (k) { c.stats[k].niv++; gagne.push(NOM_STAT[k].toLowerCase()); } }
+  setTimeout(() => toast(`${c.nom} est adulte : tu peux le monter${gagne.length ? `. Bien élevé, il gagne +1 en ${gagne.join(', ')}` : ''}`, 'or'), 3000);
+}
+function soignerPoulain(c, k, r) {
+  const s = SOINS_POULAIN.find(x => x[0] === k), reste = 90 - (maintenant() - (derniersSoins[c.id + 'p' + k] ?? -999));
+  if (reste > 0) { toast(`Encore ${Math.ceil(reste)} s avant de recommencer`); return; }
+  derniersSoins[c.id + 'p' + k] = maintenant(); c.elevage = Math.min(100, (c.elevage || 0) + s[2]);
+  if (k === 'biberon') c.faim = Math.min(100, (c.faim ?? 80) + 30);
+  if (k === 'jouer' || k === 'caresses') gagnerXp(c, 'lien', 6);
+  toast(`${c.nom} : ${['Il tète goulûment', 'Il galope autour de toi', 'Il accepte le licol', 'Il lève les pieds un par un', 'Il ferme les yeux de plaisir'][SOINS_POULAIN.indexOf(s)]} · élevage ${c.elevage} %`, 'or');
+  son(520, 0.1, 'triangle', 0.05); sauver(); aupresDuCheval(r);
+}
 function naissance(mere) {
   const pere = etat.chevaux.find(c => c.id === mere.pleine.pere) || mere; mere.pleine = null; mere.repos = etat.jour + 2; // deux jours de repos avant une nouvelle saillie
   const base = Object.fromEntries(STATS.map(([k]) => [k, clamp(Math.round((mere.stats[k].niv + pere.stats[k].niv) / 2 + rand(-1, 2)), 1, 10)]));
   const race = Math.random() < 0.5 ? mere.race : pere.race, robe = robeDuPoulain(mere.robe, pere.robe), tailleAdulte = ((mere.tailleAdulte || mere.taille) + (pere.tailleAdulte || pere.taille)) / 2;
   const p = nouveauCheval(nomLibre(), race, robe, base, tailleAdulte * 0.55);
   Object.assign(p, { tailleAdulte, naissance: etat.jour, mere: mere.id, pere: pere.id });
-  if (mere.lieu === 'pre') { p.lieu = 'pre'; p.pre = mere.pre; } else { p.lieu = 'pre'; p.pre = 'repro'; }
+  p.lieu = 'pre'; p.pre = 'elevage'; p.elevage = 0; mere.lieu = 'pre'; mere.pre = 'elevage'; mere.pos = null; // à la nurserie, avec sa mère
   etat.chevaux.push(p); etat.compteurs.naissances = (etat.compteurs.naissances || 0) + 1;
   majResidents(); sauver();
+  setTimeout(() => toast(`${p.nom} et sa mère sont à la nurserie des poulains : va t’occuper de lui (E à côté de lui)`), 4500);
   setTimeout(() => toast(`Naissance ! ${mere.nom} a mis bas : ${p.sexe === 'jument' ? 'une pouliche' : 'un poulain'}, ${p.nom}, de ${pere.nom} · robe ${(ROBES[p.robe] || ROBES.bai).nom.toLowerCase()}`, 'or'), 1500);
 }
 
@@ -3823,12 +3865,13 @@ function ecurie() {
     return `<article class="fiche ${actif ? 'active' : ''}">
       <div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span>
         <div style="min-width:0;flex:1"><input id="nom-${c.id}" data-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}" maxlength="16" aria-label="Nom du cheval">
-        <small>${c.race} · ${sexeTexte(c)}${c.naissance && !adulte(c) ? ` · poulain de ${etat.jour - c.naissance} j` : ''}${c.pleine ? ' · pleine' : ''} · ${(ROBES[c.robe] || ROBES.bai).nom}${c.box != null ? ` · box ${c.box + 1}` : ''}${c.lieu === 'pre' && !actif ? ` · au ${prePar(c.pre)?.nom ?? 'pré'}` : ''}${c.lieu === 'libre' && !actif ? ' · en liberté' : ''}</small></div></div>
+        <small>${c.race} · ${sexeTexte(c)}${c.naissance && !adulte(c) ? ` · poulain de ${etat.jour - c.naissance} j · élevage ${c.elevage || 0} %` : ''}${c.pleine ? ' · pleine' : ''} · ${(ROBES[c.robe] || ROBES.bai).nom}${c.box != null ? ` · box ${c.box + 1}` : ''}${c.lieu === 'pre' && !actif ? ` · au ${prePar(c.pre)?.nom ?? 'pré'}` : ''}${c.lieu === 'libre' && !actif ? ' · en liberté' : ''}</small></div></div>
       ${besoinsHtml(c)}${blocStats(c.stats)}
       <small>La barre montre l’expérience vers le niveau suivant.</small>
       <div class="boutons">
         ${actif ? '<button class="btn" disabled>Tu le montes</button>' : `<button class="btn or" data-monter="${c.id}">Monter</button>`}
         <button class="btn" data-perso="${c.id}">Personnaliser</button>
+        ${actif || !(poulain(c) || c.sexe === 'jument') ? '' : `<button class="btn" data-nurserie="${c.id}">${c.lieu === 'pre' && c.pre === 'elevage' ? 'Sortir de la nurserie' : 'À la nurserie'}</button>`}
         ${actif ? '' : `<button class="btn" data-repro="${c.id}">${c.lieu === 'pre' && c.pre === 'repro' ? 'Sortir de la reproduction' : 'Au paddock de reproduction'}</button>`}
         ${actif || c.box == null ? '' : `<button class="btn" data-lieu="${c.id}">${c.lieu === 'box' ? 'Sortir au pré' : 'Rentrer au box'}</button>`}
         ${!actif && c.lieu === 'libre' ? `<button class="btn or" data-revenir="${c.id}">Faire revenir au ranch</button>` : ''}
@@ -3850,6 +3893,10 @@ function ecurie() {
     if (c.box != null) c.lieu = 'box'; else if (etat.pres.length) { c.lieu = 'pre'; c.pre = etat.pres[0].id; }
     else { c.lieu = 'libre'; c.pos = { x: J.x + 3, z: J.z + 3, rot: 0 }; }
     toast(`${c.nom} est revenu ${c.lieu === 'box' ? 'dans son box' : c.lieu === 'pre' ? 'au pré' : 'près de toi'}`);
+    majResidents(); sauver(); ecurie(); });
+  $('#contenu').querySelectorAll('[data-nurserie]').forEach(b => b.onclick = () => { const c = etat.chevaux.find(h => h.id === b.dataset.nurserie);
+    if (c.lieu === 'pre' && c.pre === 'elevage') { c.lieu = c.box != null ? 'box' : 'pre'; c.pre = c.lieu === 'pre' ? 'p1' : c.pre; }
+    else { c.lieu = 'pre'; c.pre = 'elevage'; c.pos = null; if (mene?.cheval === c) mene = null; toast(`${c.nom} va à la nurserie des poulains`); }
     majResidents(); sauver(); ecurie(); });
   $('#contenu').querySelectorAll('[data-repro]').forEach(b => b.onclick = () => { const c = etat.chevaux.find(h => h.id === b.dataset.repro);
     if (c.lieu === 'pre' && c.pre === 'repro') c.lieu = c.box != null ? 'box' : 'pre', c.pre = c.lieu === 'pre' ? 'p1' : c.pre;
@@ -5089,6 +5136,7 @@ function aide() {
       <li><b>Box</b> : chaque box ouvre au fond sur un petit paddock ; les chevaux y sortent seuls dans la journée et rentrent le soir. Les portes de devant s’ouvrent quand on fait entrer ou sortir un cheval.</li>
       <li><b>Pré des stagiaires</b>, derrière l’écurie des box : chaque matin, les enfants vont chercher leur cheval au box et l’y mènent ; le soir, ils le ramènent. Ils contournent bâtiments et clôtures.</li>
       <li><b>Paddock de reproduction</b>, à l’ouest du ranch : mets-y une jument et un étalon (bouton dans l’écurie, H). Le poulain naît deux jours plus tard, grandit en quatre jours et hérite de ses parents.</li>
+      <li><b>Nurserie des poulains</b>, au nord du paddock de reproduction : le poulain y naît avec sa mère. Approche-toi de lui (E) pour lui donner le biberon, jouer, l’habituer au licol… Bien élevé, il gagne des niveaux en devenant adulte et se vend plus cher.</li>
       <li><b>Sellerie</b>, dans la grange : entre, tes selles sont sur leurs porte-selles et tes tapis sur les barres. Selles et tapis s’achètent au marché, chez Lucien le sellier.</li>
       <li><b>Ta maison</b> : entre par la porte. À table, tes réserves et tes comptes ; le soir, ton lit.</li>
       <li><b>Jour et nuit</b> : une journée dure 10 minutes. La nuit, de 20 h 30 à 6 h 30, les lampes s’allument et les enfants dorment au gîte.</li>
@@ -5684,6 +5732,7 @@ function demarrer(donnees = {}) {
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
   mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
+  if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
   etat.tapis ||= ['uni']; for (const x in etatsStage) delete etatsStage[x];
   construire(); construireSellerie(); NAV.b = null; remettreStagiaires();
