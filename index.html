@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 19:04";</script>
+<script>window.VERSION_JEU = "2026-10-12 19:06";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -142,6 +142,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .choix:hover{border-color:var(--or)}
 .note{color:var(--texte-doux);font-size:12px;margin-top:14px!important}
 #longe{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
+.nuancier{display:flex;flex-wrap:wrap;gap:6px}.pastille{width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.35);padding:0;cursor:pointer}.pastille.on{outline:3px solid var(--or);outline-offset:2px}
 #lecon{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 .lecon-tete{display:flex;justify-content:space-between;gap:10px;font-weight:800}
 .lecon-tete span{color:var(--or)}
@@ -325,11 +326,16 @@ const LICOLS = { rouge: { nom: 'Rouge', c: 0xc0392b, prix: 0 }, bleu: { nom: 'Bl
   vert: { nom: 'Vert', c: 0x2f9e5a, prix: 15 }, violet: { nom: 'Violet', c: 0x7d4fb0, prix: 20 }, jaune: { nom: 'Jaune', c: 0xf3b52d, prix: 20 }, noir: { nom: 'Noir', c: 0x222222, prix: 15 } };
 const mesLicols = () => etat.licols ||= ['rouge'];
 // couvertures (2026-10-12) : pour les chevaux laissés dehors ; achetées chez Lucien, c.couverture = celle qu'il porte
-const COUVERTURES = { marine: { nom: 'Bleu marine', c: 0x22335a, motif: 'uni', prix: 40 }, bordeaux: { nom: 'Bordeaux', c: 0x7a2230, motif: 'uni', prix: 40 },
+const COUVERTURES = { marine: { nom: 'Bleu marine', c: 0x22335a, motif: 'uni', prix: 0 }, bordeaux: { nom: 'Bordeaux', c: 0x7a2230, motif: 'uni', prix: 40 },
   sapin: { nom: 'Vert sapin', c: 0x2f5a3a, motif: 'uni', prix: 40 }, rose: { nom: 'Rose', c: 0xd9709f, motif: 'uni', prix: 45 },
   violet: { nom: 'Violette', c: 0x6a4a9c, motif: 'uni', prix: 45 }, ecossaise: { nom: 'Écossaise', c: 0x8a2a2a, motif: 'ecossais', prix: 60 },
   etoiles: { nom: 'Étoilée', c: 0x26407a, motif: 'etoiles', prix: 70 } };
-const mesCouvertures = () => etat.couvertures ||= [];
+const mesCouvertures = () => { const l = etat.couvertures ||= []; if (!l.includes('marine')) l.unshift('marine'); return l; }; // la marine est offerte
+// teintes libres (2026-10-12) : un licol ou une couverture se reteint pour chaque cheval (c.licolC, c.couvC)
+const NUANCIER = [0xc0392b, 0xe67e22, 0xf3b52d, 0xf4e04d, 0x8bc34a, 0x2f9e5a, 0x1abc9c, 0x5dade2, 0x2f6fb5, 0x22335a,
+  0x7d4fb0, 0xb06ad9, 0xe77fb3, 0xff9ec4, 0x7a2230, 0x8d5a3b, 0xd9c9a8, 0xf3eee4, 0x8a8f96, 0x222222];
+const couleurLicol = c => c.licolC ?? LICOLS[c.licol]?.c;
+const couleurCouv = c => c.couvC ?? COUVERTURES[c.couverture]?.c;
 // Races : taille (1 = cheval de 1,60 m), carrure, longueur des jambes, crins longs, fanons
 const RACES = {
   'Poney de selle':      { robe: 'palomino', taille: 0.94, forme: { largeur: 1.05, jambes: 0.9 } },
@@ -1895,9 +1901,9 @@ function modeleCheval(spec, monte, tenueForcee = null) {
     const k = taille < 0.9 ? Math.pow(1 / taille, 0.7) : 1;
     cavalier = poserCavalier(corps, new THREE.Vector3(0, 1.66, 0.05), tenueForcee || etat?.tenue || {}, k, larg);
   }
-  if (!monte && COUVERTURES[spec.couverture]) couvrir(corps, spec.couverture);
+  if (!monte && COUVERTURES[spec.couverture]) couvrir(corps, spec.couverture, couleurCouv(spec));
   if (!monte && LICOLS[spec.licol]) { // licol : muserolle et têtière de couleur
-    const b = robeMat(LICOLS[spec.licol].c, 0.6);
+    const b = robeMat(couleurLicol(spec), 0.6);
     maille(geoMors, b, 0, -0.03, 0.5, tete).scale.set(0.85, 1.0, 1.4); maille(geoMors, b, 0, 0.0, 0.02, tete).scale.set(1.3, 1.9, 1.4);
   }
   g.scale.setScalar(taille);
@@ -1929,9 +1935,9 @@ function cavaliere(tenue) {
 }
 // couverture : une demi-coque d'étoffe sur le dos et les flancs, repère du cheval dessiné (dos à 1,62 m, ventre au-dessous de 0,9 m)
 const matsCouv = {}, COUV = { r: 0.46, l: 1.68, y: 1.14, z: -0.14, a: 2.35, pente: 0.13 }; // d'après les os du vrai cheval : garrot z 0,48, queue z -0,95
-function couvrir(corps, k) {
+function couvrir(corps, k, teinte) {
   const d = COUVERTURES[k]; if (!d) return;
-  const m = matsCouv[k] ||= (() => { const x = matTapis(d.c, d.motif).clone(); x.side = THREE.DoubleSide; return x; })();
+  const col = teinte ?? d.c, m = matsCouv[k + '|' + col] ||= (() => { const x = matTapis(col, d.motif).clone(); x.side = THREE.DoubleSide; return x; })();
   const R = COUV.r, L = COUV.l, a = COUV.a, g = new THREE.Group(); g.position.set(0, COUV.y, COUV.z); g.rotation.x = -COUV.pente; corps.add(g);
   const c = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 28, 1, true, Math.PI - a, 2 * a), m);
   c.rotation.x = Math.PI / 2; c.castShadow = true; g.add(c);
@@ -2141,7 +2147,7 @@ function modeleReel(spec, monte, tenueForcee) {
     if (o.isBone) { os[o.name] = o; return; }
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
-    if (o.name === NOM_BRIDE) { const lc = !monte && LICOLS[spec.licol]; o.visible = monte || !!lc; if (monte) o.material = matCuirReel(e.cBride, 'bride'); else if (lc) o.material = matCuirReel(lc.c, 'bride'); }
+    if (o.name === NOM_BRIDE) { const lc = !monte && LICOLS[spec.licol]; o.visible = monte || !!lc; if (monte) o.material = matCuirReel(e.cBride, 'bride'); else if (lc) o.material = matCuirReel(couleurLicol(spec), 'bride'); }
     else if (o.name === NOM_SELLE) { o.visible = monte && e.selle === 'western'; if (o.visible) o.material = matCuirReel(e.cSelle, 'Saddle'); }
     else if (o.material.name === 'Horse') o.material = matRobeReel(spec.robe);
     else if (o.material.name === 'Hair') o.material = matCrinsReel(crin);
@@ -2152,7 +2158,7 @@ function modeleReel(spec, monte, tenueForcee) {
   if (!monte && COUVERTURES[spec.couverture]) {
     const S = REEL.siege, siege = new THREE.Group(), largeur = new THREE.Group(), h = new THREE.Group();
     siege.position.copy(S.pos); siege.quaternion.copy(S.quat); siege.scale.copy(S.sc); os[S.os].add(siege);
-    largeur.scale.x = REEL.dosLarg / 0.35; h.position.set(0, -1.645, -0.07); couvrir(h, spec.couverture); largeur.add(h); siege.add(largeur);
+    largeur.scale.x = REEL.dosLarg / 0.35; h.position.set(0, -1.645, -0.07); couvrir(h, spec.couverture, couleurCouv(spec)); largeur.add(h); siege.add(largeur);
   }
   if (monte) {
     const S = REEL.siege, siege = new THREE.Group();
@@ -2946,21 +2952,26 @@ function aupresDuCheval(r) {
       <button class="btn" data-a="mener">${mene === r ? 'Lâcher ici' : 'Mener en main'}</button>
       <button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>
     </div>
-    <h3 class="section">Licol${c.licol ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
+    <h3 class="section">Licol${c.licol && c.licolC == null ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
     <div class="boutons">${mesLicols().map(k => `<button class="btn ${c.licol === k ? 'or' : ''}" data-licol="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(LICOLS[k].c)}"></span>${LICOLS[k].nom}</button>`).join('')}
       ${c.licol ? '<button class="btn" data-licol="">Enlever le licol</button>' : ''}</div>
+    ${c.licol ? `<p class="note" style="margin:6px 0 2px">Couleur du licol de ${c.nom} :</p><div class="nuancier">${NUANCIER.map(n => `<button class="pastille ${couleurLicol(c) === n ? 'on' : ''}" data-teinte-licol="${n}" style="background:${hex(n)}" aria-label="couleur"></button>`).join('')}</div>` : ''}
     <p class="note">D’autres couleurs de licol chez Lucien, le sellier du marché.</p>
-    <h3 class="section">Couverture${c.couverture ? ` : ${COUVERTURES[c.couverture]?.nom.toLowerCase()}` : ''}</h3>
+    <h3 class="section">Couverture${c.couverture && c.couvC == null ? ` : ${COUVERTURES[c.couverture]?.nom.toLowerCase()}` : ''}</h3>
     ${mesCouvertures().length ? `<div class="boutons">${mesCouvertures().map(k => `<button class="btn ${c.couverture === k ? 'or' : ''}" data-couv="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(COUVERTURES[k].c)}"></span>${COUVERTURES[k].nom}</button>`).join('')}
-      ${c.couverture ? '<button class="btn" data-couv="">Enlever la couverture</button>' : ''}</div>` : '<p class="note">Tu n’as pas encore de couverture : Lucien en vend au marché.</p>'}`);
+      ${c.couverture ? '<button class="btn" data-couv="">Enlever la couverture</button>' : ''}</div>
+    ${c.couverture ? `<p class="note" style="margin:6px 0 2px">Couleur de la couverture de ${c.nom} :</p><div class="nuancier">${NUANCIER.map(n => `<button class="pastille ${couleurCouv(c) === n ? 'on' : ''}" data-teinte-couv="${n}" style="background:${hex(n)}" aria-label="couleur"></button>`).join('')}</div>` : ''}` : '<p class="note">Tu n’as pas encore de couverture : Lucien en vend au marché.</p>'}`);
+  const reouvrir = () => { majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer(); };
+  $('#contenu').querySelectorAll('[data-teinte-licol]').forEach(b => b.onclick = () => { c.licolC = +b.dataset.teinteLicol; reouvrir(); });
+  $('#contenu').querySelectorAll('[data-teinte-couv]').forEach(b => b.onclick = () => { c.couvC = +b.dataset.teinteCouv; reouvrir(); });
   $('#contenu').querySelectorAll('[data-couv]').forEach(b => b.onclick = () => {
     const k = b.dataset.couv || null;
     if (k && etat.chevaux.some(h => h !== c && h.couverture === k)) { const autre = etat.chevaux.find(h => h !== c && h.couverture === k); autre.couverture = null; toast(`La couverture passe de ${autre.nom} à ${c.nom}`); }
-    c.couverture = k; if (k) toast(`${c.nom} a sa couverture ${COUVERTURES[k].nom.toLowerCase()}`); else toast(`Couverture enlevée à ${c.nom}`);
+    c.couverture = k; c.couvC = null; if (k) toast(`${c.nom} a sa couverture ${COUVERTURES[k].nom.toLowerCase()}`); else toast(`Couverture enlevée à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
   });
   $('#contenu').querySelectorAll('[data-licol]').forEach(b => b.onclick = () => {
-    c.licol = b.dataset.licol || null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
+    c.licol = b.dataset.licol || null; c.licolC = null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
   });
   $('#contenu').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
@@ -3734,7 +3745,7 @@ function sellier() {
     <div class="grille">${Object.entries(LICOLS).filter(([, l]) => l.prix).map(([k, l]) => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(l.c)}"></span><div><h3>Licol ${l.nom.toLowerCase()}</h3></div></div>
       <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${l.prix} p.</span>${mesLicols().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-licol-achat="${k}" ${etat.pieces >= l.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`).join('')}</div>
     <h3 class="section">Couvertures</h3><p class="note">Pour tes chevaux qui restent dehors, au pré ou en liberté, quand il pleut ou la nuit. Tu la mets avec E, à côté du cheval.</p>
-    <div class="grille">${Object.entries(COUVERTURES).map(([k, d]) => { const ap = matTapis(d.c, d.motif).map?.image?.toDataURL?.() || ''; return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${ap ? `url(${ap}) center/cover` : hex(d.c)}"></span><div><h3>Couverture ${d.nom.toLowerCase()}</h3></div></div>
+    <div class="grille">${Object.entries(COUVERTURES).filter(([, d]) => d.prix).map(([k, d]) => { const ap = matTapis(d.c, d.motif).map?.image?.toDataURL?.() || ''; return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${ap ? `url(${ap}) center/cover` : hex(d.c)}"></span><div><h3>Couverture ${d.nom.toLowerCase()}</h3></div></div>
       <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${d.prix} p.</span>${mesCouvertures().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-couv-achat="${k}" ${etat.pieces >= d.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`; }).join('')}</div>`);
   $('#contenu').querySelectorAll('[data-couv-achat]').forEach(b => b.onclick = () => { const k = b.dataset.couvAchat, d = COUVERTURES[k]; if (etat.pieces < d.prix || mesCouvertures().includes(k)) return; etat.pieces -= d.prix; mesCouvertures().push(k); sonPiece(); sauver(); toast(`Couverture ${d.nom.toLowerCase()} achetée`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-licol-achat]').forEach(b => b.onclick = () => { const k = b.dataset.licolAchat, l = LICOLS[k]; if (etat.pieces < l.prix || mesLicols().includes(k)) return; etat.pieces -= l.prix; mesLicols().push(k); sonPiece(); sauver(); toast(`Licol ${l.nom.toLowerCase()} acheté`, 'or'); sellier(); });
