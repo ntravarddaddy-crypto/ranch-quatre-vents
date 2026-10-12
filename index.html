@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 18:38";</script>
+<script>window.VERSION_JEU = "2026-10-12 18:49";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -141,6 +141,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .choix.choisi{border-color:var(--or);color:var(--or)}
 .choix:hover{border-color:var(--or)}
 .note{color:var(--texte-doux);font-size:12px;margin-top:14px!important}
+#longe{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 #lecon{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 .lecon-tete{display:flex;justify-content:space-between;gap:10px;font-weight:800}
 .lecon-tete span{color:var(--or)}
@@ -160,7 +161,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .besoins{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;align-items:center;font-size:11px;color:var(--texte-doux);margin-top:4px}
 .besoins .jauge{margin:0;height:6px}
 @media (max-width:640px){
-  #lecon{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+  #lecon,#longe{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
   #voile.lateral{align-items:flex-end;padding:8px}
   body.atelier #gauche,body.atelier #minicarte,body.atelier #menu,body.atelier #tactile{display:none}
   #voile.lateral #panneau{max-height:52%}
@@ -198,7 +199,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   #tactile button{height:46px;font-size:13px}
   #tactile .saut{height:52px;font-size:16px}
   #invite{bottom:12px;font-size:13px;max-width:calc(100vw - 420px);white-space:normal;text-align:center}
-  #lecon{bottom:8px;width:min(400px,calc(100vw - 360px))}
+  #lecon,#longe{bottom:8px;width:min(400px,calc(100vw - 360px))}
   #chrono{font-size:16px}
   #voile #panneau{max-height:calc(100% - 4px);padding:12px}
 }
@@ -240,6 +241,14 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   <div id="chrono" class="carton" hidden></div>
   <div id="toasts" aria-live="polite"></div>
   <div id="invite" class="carton" hidden></div>
+  <div id="longe" class="carton" hidden>
+    <div class="lecon-tete"><b id="lg-titre">Longe</b><span id="lg-temps"></span></div>
+    <div class="ordres">
+      <button type="button" data-longe="arret"><kbd>1</kbd>Arrêt</button><button type="button" data-longe="pas"><kbd>2</kbd>Pas</button>
+      <button type="button" data-longe="trot"><kbd>3</kbd>Trot</button><button type="button" data-longe="galop"><kbd>4</kbd>Galop</button>
+      <button type="button" data-longe="main"><kbd>5</kbd>Changer de main</button><button type="button" data-longe="fin"><kbd>E</kbd>Arrêter</button>
+    </div>
+  </div>
   <div id="lecon" class="carton" hidden>
     <div class="lecon-tete"><b id="l-titre">Leçon</b><span id="l-temps"></span></div>
     <div class="lecon-jauges"><span>Progrès</span><div class="jauge"><i id="l-prog"></i></div><span>Humeur</span><div class="jauge"><i id="l-humeur"></i></div></div>
@@ -311,6 +320,10 @@ const ROBES = {
 };
 const STATS = [['vitesse', 'Vitesse'], ['saut', 'Saut'], ['endurance', 'Endurance'], ['lien', 'Lien']];
 const NOM_STAT = Object.fromEntries(STATS);
+// licols (2026-10-12) : le rouge est offert, les autres chez Lucien au marché ; c.licol = la couleur portée (ou rien)
+const LICOLS = { rouge: { nom: 'Rouge', c: 0xc0392b, prix: 0 }, bleu: { nom: 'Bleu', c: 0x2f6fb5, prix: 15 }, rose: { nom: 'Rose', c: 0xe77fb3, prix: 15 },
+  vert: { nom: 'Vert', c: 0x2f9e5a, prix: 15 }, violet: { nom: 'Violet', c: 0x7d4fb0, prix: 20 }, jaune: { nom: 'Jaune', c: 0xf3b52d, prix: 20 }, noir: { nom: 'Noir', c: 0x222222, prix: 15 } };
+const mesLicols = () => etat.licols ||= ['rouge'];
 // Races : taille (1 = cheval de 1,60 m), carrure, longueur des jambes, crins longs, fanons
 const RACES = {
   'Poney de selle':      { robe: 'palomino', taille: 0.94, forme: { largeur: 1.05, jambes: 0.9 } },
@@ -531,8 +544,42 @@ const CIEL = {
 };
 const lisse = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 let nuitF = 0; // 0 : plein jour, 1 : pleine nuit
+// Météo (2026-10-12) : etat.meteo, tirée chaque jour (beau, brume, pluie). meteoF suit la cible en douceur.
+// Brume : brouillard épais le matin, plus léger l'après-midi. Pluie : ciel gris, gouttes autour de la caméra.
+const METEO = { beau: 'Beau temps', brume: 'Brume', pluie: 'Pluie' };
+const meteoF = { brume: 0, pluie: 0 }; let meteoT = 0;
+const GRIS_BRUME = new THREE.Color(0xc4cbd0), GRIS_PLUIE = new THREE.Color(0x7d8791), GRIS_NUIT = new THREE.Color(0x1a1f28);
+const pluie = (() => {
+  const N = LEGER ? 700 : 1800, pos = new Float32Array(N * 6), v = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const x = (Math.random() - 0.5) * 70, y = Math.random() * 32, z = (Math.random() - 0.5) * 70;
+    pos.set([x, y, z, x + 0.12, y + 0.75, z], i * 6); v[i] = 18 + Math.random() * 8;
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const l = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xc8d4e0, transparent: true, opacity: 0, depthWrite: false }));
+  l.frustumCulled = false; l.visible = false; l.userData.v = v; return l;
+})();
 const couleurTmp = new THREE.Color(), dirSoleil = new THREE.Vector3();
+function majPluie(dt) {
+  const m = meteoF.pluie; pluie.visible = m > 0.03;
+  if (!pluie.visible) return;
+  if (!pluie.parent) scene.add(pluie);
+  pluie.material.opacity = 0.5 * m * (1 - 0.5 * nuitF);
+  pluie.position.set(camera.position.x, camera.position.y - 16, camera.position.z);
+  const a = pluie.geometry.attributes.position.array, v = pluie.userData.v;
+  for (let i = 0; i < v.length; i++) {
+    let y = a[i * 6 + 1] - v[i] * dt;
+    if (y < 0) y += 32;
+    a[i * 6 + 1] = y; a[i * 6 + 4] = y + 0.75;
+  }
+  pluie.geometry.attributes.position.needsUpdate = true;
+}
 function majLumiere(cx = J.x, cz = J.z) {
+  const tNow = performance.now() / 1000, dtm = meteoT ? Math.min(0.1, tNow - meteoT) : 0; meteoT = tNow;
+  const me = etat?.meteo, hh = etat?.heure ?? 12;
+  const cibleBrume = me === 'brume' ? (hh < 11 ? 1 : hh < 15 ? 1 - (hh - 11) / 4 * 0.4 : 0.6) : 0, ciblePluie = me === 'pluie' ? 1 : 0;
+  meteoF.brume += (cibleBrume - meteoF.brume) * Math.min(1, dtm * 0.4); meteoF.pluie += (ciblePluie - meteoF.pluie) * Math.min(1, dtm * 0.4);
+  if (!meteoT || dtm === 0) { meteoF.brume = cibleBrume; meteoF.pluie = ciblePluie; }
   const h = etat?.heure ?? 12, a = (h - 6.5) / 14 * Math.PI, elev = Math.sin(a);
   const jour = lisse(-0.1, 0.22, elev), aube = (1 - lisse(0.05, 0.4, Math.abs(elev))) * lisse(-0.25, 0, elev);
   nuitF = 1 - jour;
@@ -550,7 +597,18 @@ function majLumiere(cx = J.x, cz = J.z) {
   u.bas.value.copy(CIEL.jour.bas).lerp(CIEL.aube.bas, aube).lerp(CIEL.nuit.bas, nuitF);
   scene.fog.color.copy(u.bas.value); scene.background.copy(u.bas.value);
   scene.fog.near = 150 - 60 * nuitF; scene.fog.far = 640 - 260 * nuitF;
-  etoiles.material.opacity = lisse(0.5, 1, nuitF);
+  // météo : ciel couvert, soleil voilé, brouillard rapproché
+  const couvert = Math.max(meteoF.brume, meteoF.pluie);
+  if (couvert > 0.001) {
+    const gris = couleurTmp.copy(meteoF.pluie > meteoF.brume ? GRIS_PLUIE : GRIS_BRUME).lerp(GRIS_NUIT, nuitF);
+    u.haut.value.lerp(gris, 0.85 * couvert); u.bas.value.lerp(gris, 0.9 * couvert);
+    scene.fog.color.copy(u.bas.value); scene.background.copy(u.bas.value);
+    soleil.intensity *= 1 - 0.6 * couvert; hemi.intensity *= 1 - 0.15 * couvert;
+    const kb = Math.sqrt(meteoF.brume), kp = meteoF.pluie * (1 - kb);
+    scene.fog.near += (2 - scene.fog.near) * kb + (25 - scene.fog.near) * kp; scene.fog.far += (38 - scene.fog.far) * kb + (170 - scene.fog.far) * kp;
+  }
+  majPluie(dtm);
+  etoiles.material.opacity = lisse(0.5, 1, nuitF) * (1 - couvert);
   lune.position.set(-dirSoleil.x * 700, Math.max(0.3, dirSoleil.y) * 700, -0.45 * 700); lune.material.opacity = lisse(0.3, 0.9, nuitF);
   if (matNuage) { matNuage.color.set(0xffffff).lerp(couleurTmp.set(0x3a4258), nuitF); matNuage.emissive.set(0x9a9fa6).lerp(couleurTmp.set(0x0b0d14), nuitF); }
   const allume = lisse(0.35, 0.7, nuitF);
@@ -1831,6 +1889,10 @@ function modeleCheval(spec, monte, tenueForcee = null) {
     const k = taille < 0.9 ? Math.pow(1 / taille, 0.7) : 1;
     cavalier = poserCavalier(corps, new THREE.Vector3(0, 1.66, 0.05), tenueForcee || etat?.tenue || {}, k, larg);
   }
+  if (!monte && LICOLS[spec.licol]) { // licol : muserolle et têtière de couleur
+    const b = robeMat(LICOLS[spec.licol].c, 0.6);
+    maille(geoMors, b, 0, -0.03, 0.5, tete).scale.set(0.85, 1.0, 1.4); maille(geoMors, b, 0, 0.0, 0.02, tete).scale.set(1.3, 1.9, 1.4);
+  }
   g.scale.setScalar(taille);
   return { g, corps, cou, tete, queue, jambes, cavalier, phase: Math.random() * 6, couBase: 0.8, teteBase: 0.9, queueBase: f.queueHaute ? 0.75 : 0.3, idx: Math.random() * 10 };
 }
@@ -2046,7 +2108,7 @@ function modeleReel(spec, monte, tenueForcee) {
     if (o.isBone) { os[o.name] = o; return; }
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
-    if (o.name === NOM_BRIDE) { o.visible = monte; if (monte) o.material = matCuirReel(e.cBride, 'bride'); }
+    if (o.name === NOM_BRIDE) { const lc = !monte && LICOLS[spec.licol]; o.visible = monte || !!lc; if (monte) o.material = matCuirReel(e.cBride, 'bride'); else if (lc) o.material = matCuirReel(lc.c, 'bride'); }
     else if (o.name === NOM_SELLE) { o.visible = monte && e.selle === 'western'; if (o.visible) o.material = matCuirReel(e.cSelle, 'Saddle'); }
     else if (o.material.name === 'Horse') o.material = matRobeReel(spec.robe);
     else if (o.material.name === 'Hair') o.material = matCrinsReel(crin);
@@ -2577,6 +2639,7 @@ function contourner(a, b) {
 // un cheval qui n'est pas au box : mené en main, au pré (il sort si la barrière est ouverte), ou en liberté
 function majResident(r, dt) {
   const c = r.cheval;
+  if (longe && longe.id === c.id) { majLonge(r, dt); return; }
   if (r === mene) {
     // il suit la trace exacte du joueur (il passe donc la barrière par où l'on est passé), à 2,2 m derrière
     const tr = r.trace ||= [];
@@ -2813,6 +2876,7 @@ function residentProche(dMax = 3) {
   return best;
 }
 function toucheMonter() {
+  if (longe) finirLonge();
   if (ouvert()) { if (modeBatir || vueAtelier || mini) return; fermer(); } // un panneau de dialogue ne bloque plus M
   if (etat.conduite) { sortirVoiture(); return; }
   if (!etat.aPied) { descendre(); return; }
@@ -2838,10 +2902,20 @@ function aupresDuCheval(r) {
       <button class="btn" data-a="pomme" ${etat.pommes ? '' : 'disabled'}>Pomme (${etat.pommes})</button>
       <button class="btn" data-a="brosser">Brosser</button>
       <button class="btn" data-a="mener">${mene === r ? 'Lâcher ici' : 'Mener en main'}</button>
-    </div>`);
+      <button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>
+    </div>
+    <h3 class="section">Licol${c.licol ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
+    <div class="boutons">${mesLicols().map(k => `<button class="btn ${c.licol === k ? 'or' : ''}" data-licol="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(LICOLS[k].c)}"></span>${LICOLS[k].nom}</button>`).join('')}
+      ${c.licol ? '<button class="btn" data-licol="">Enlever le licol</button>' : ''}</div>
+    <p class="note">D’autres couleurs de licol chez Lucien, le sellier du marché.</p>`);
+  $('#contenu').querySelectorAll('[data-licol]').forEach(b => b.onclick = () => {
+    c.licol = b.dataset.licol || null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
+    majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
+  });
   $('#contenu').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     const a = b.dataset.a;
     if (a === 'monter') { fermer(); monter(c.id); return; }
+    if (a === 'longer') { fermer(); commencerLonge(r); return; }
     if (a === 'mener') { if (mene === r) lacher(r); else { if (mene) lacher(mene); mene = r; r.trace = null; c.fugue = null; toast(`Tu mènes ${c.nom} en main : il te suit`); } fermer(); return; }
     if (a === 'foin') { c.faim = Math.min(100, (c.faim ?? 80) + 40); toast(`${c.nom} mange son foin`); }
     if (a === 'eau') { c.soif = Math.min(100, (c.soif ?? 80) + 50); toast(`${c.nom} boit un seau d’eau`); }
@@ -2857,6 +2931,13 @@ function aupresDuCheval(r) {
   });
 }
 function majPieton(dt) {
+  if (longe) { // au centre du cercle, il tourne avec son cheval
+    const r = residents.find(x => x.cheval.id === longe.id);
+    if (r) J.rot += angleDiff(J.rot, Math.atan2(r.x - J.x, r.z - J.z)) * Math.min(1, dt * 6);
+    J.vit = 0; J.endu = Math.min(enduMax(), J.endu + 9 * dt);
+    if (pietonJoueur) { pietonJoueur.g.position.set(J.x, 0, J.z); pietonJoueur.g.rotation.y = J.rot; marcher(pietonJoueur, 0, dt); }
+    return;
+  }
   const libreJeu = !ouvert();
   const av = libreJeu && (touches.KeyW || touches.ArrowUp), rec = libreJeu && (touches.KeyS || touches.ArrowDown);
   const g = libreJeu && (touches.KeyA || touches.ArrowLeft), d = libreJeu && (touches.KeyD || touches.ArrowRight);
@@ -3492,6 +3573,14 @@ function majChevalStage(h, dt) {
 const AGE_ADULTE = 4, GESTATION = 2;
 const adulte = c => !c.naissance || etat.jour - c.naissance >= AGE_ADULTE;
 const sexeTexte = c => c.sexe === 'jument' ? 'jument' : 'étalon';
+function saillies() {
+  const dans = etat.chevaux.filter(c => c.lieu === 'pre' && c.pre === 'repro' && adulte(c)), etalon = dans.find(c => c.sexe === 'etalon');
+  if (!etalon) return;
+  for (const j of dans) if (j.sexe === 'jument' && !j.pleine && (j.repos ?? 0) <= etat.jour) {
+    j.pleine = { pere: etalon.id, terme: etat.jour + GESTATION }; sauver();
+    toast(`${j.nom} et ${etalon.nom} se sont plu : ${j.nom} attend un poulain, naissance dans ${GESTATION} jours`, 'or');
+  }
+}
 function reproduction() {
   const dans = etat.chevaux.filter(c => c.lieu === 'pre' && c.pre === 'repro' && adulte(c)), etalon = dans.find(c => c.sexe === 'etalon');
   for (const j of etat.chevaux.filter(c => c.sexe === 'jument')) {
@@ -3500,16 +3589,30 @@ function reproduction() {
   }
   for (const c of etat.chevaux) if (c.naissance) { const age = etat.jour - c.naissance; c.taille = c.tailleAdulte * (0.55 + 0.45 * Math.min(1, age / AGE_ADULTE)); if (age === AGE_ADULTE) setTimeout(() => toast(`${c.nom} est adulte : tu peux le monter`, 'or'), 3000); }
 }
+// robes mélangées : une couleur entre celles des parents, gardée dans etat.robes et ajoutée à ROBES au chargement
+const corpsDe = r => r.taches ?? r.points ?? r.corps;
+function robeDuPoulain(m, p) {
+  const A = ROBES[m] || ROBES.bai, B = ROBES[p] || ROBES.bai;
+  if (m === p) return m;
+  if ((A.taches || A.points) && Math.random() < 0.4) return m; // les taches se transmettent telles quelles
+  if ((B.taches || B.points) && Math.random() < 0.4) return p;
+  if (Math.random() < 0.25) return Math.random() < 0.5 ? m : p;
+  const t = rand(0.3, 0.7), mix = (a, b) => '0x' + new THREE.Color(a).lerp(new THREE.Color(b), t).multiplyScalar(rand(0.93, 1.07)).getHexString();
+  const cle = 'mix' + Date.now().toString(36), nomA = A.nom.toLowerCase(), nomB = B.nom.toLowerCase();
+  const def = { nom: `Mêlée ${nomA} et ${nomB}`, corps: +mix(corpsDe(A), corpsDe(B)), crin: Math.random() < 0.5 ? A.crin : B.crin, jambes: +mix(A.jambes, B.jambes), liste: Math.random() < 0.5, melange: true };
+  (etat.robes ||= {})[cle] = def; ROBES[cle] = def;
+  return cle;
+}
 function naissance(mere) {
   const pere = etat.chevaux.find(c => c.id === mere.pleine.pere) || mere; mere.pleine = null; mere.repos = etat.jour + 2; // deux jours de repos avant une nouvelle saillie
   const base = Object.fromEntries(STATS.map(([k]) => [k, clamp(Math.round((mere.stats[k].niv + pere.stats[k].niv) / 2 + rand(-1, 2)), 1, 10)]));
-  const race = Math.random() < 0.5 ? mere.race : pere.race, robe = Math.random() < 0.5 ? mere.robe : pere.robe, tailleAdulte = ((mere.tailleAdulte || mere.taille) + (pere.tailleAdulte || pere.taille)) / 2;
+  const race = Math.random() < 0.5 ? mere.race : pere.race, robe = robeDuPoulain(mere.robe, pere.robe), tailleAdulte = ((mere.tailleAdulte || mere.taille) + (pere.tailleAdulte || pere.taille)) / 2;
   const p = nouveauCheval(nomLibre(), race, robe, base, tailleAdulte * 0.55);
   Object.assign(p, { tailleAdulte, naissance: etat.jour, mere: mere.id, pere: pere.id });
   if (mere.lieu === 'pre') { p.lieu = 'pre'; p.pre = mere.pre; } else { p.lieu = 'pre'; p.pre = 'repro'; }
   etat.chevaux.push(p); etat.compteurs.naissances = (etat.compteurs.naissances || 0) + 1;
   majResidents(); sauver();
-  setTimeout(() => toast(`Naissance ! ${mere.nom} a mis bas : ${p.sexe === 'jument' ? 'une pouliche' : 'un poulain'}, ${p.nom}, fils ou fille de ${pere.nom}`, 'or'), 1500);
+  setTimeout(() => toast(`Naissance ! ${mere.nom} a mis bas : ${p.sexe === 'jument' ? 'une pouliche' : 'un poulain'}, ${p.nom}, de ${pere.nom} · robe ${(ROBES[p.robe] || ROBES.bai).nom.toLowerCase()}`, 'or'), 1500);
 }
 
 // ---- Selles et tapis : on les achète au marché, chez Lucien le sellier ; la sellerie de la grange les expose
@@ -3573,9 +3676,13 @@ function sellier() {
     return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${apercu ? `url(${apercu}) center/cover` : hex(e.cTapis)}"></span><div><h3>${t.nom}</h3><small>à la couleur de ton choix</small></div></div>
     <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${t.prix} p.</span>${etat.tapis.includes(k) ? '<button class="btn" disabled>Dans ta sellerie</button>' : `<button class="btn or" data-tapis="${k}" ${etat.pieces >= t.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`;
   }).join('');
-  ouvrir(`<div class="pnj">Lucien · sellier · marché du village</div><h2>Selles et tapis</h2>
+  ouvrir(`<div class="pnj">Lucien · sellier · marché du village</div><h2>Selles, tapis et licols</h2>
     <p>Tu as <b>${etat.pieces} pièces</b>. Ce que tu achètes rejoint ta sellerie, dans la grange du ranch : tu l’y choisis pour chacun de tes chevaux.</p>
-    <h3 class="section">Selles</h3><div class="grille">${selles}</div><h3 class="section">Tapis de selle</h3><div class="grille">${tapis}</div>`);
+    <h3 class="section">Selles</h3><div class="grille">${selles}</div><h3 class="section">Tapis de selle</h3><div class="grille">${tapis}</div>
+    <h3 class="section">Licols</h3><p class="note">Pour mener tes chevaux en main et les longer. Tu le mets à ton cheval avec E, à côté de lui.</p>
+    <div class="grille">${Object.entries(LICOLS).filter(([, l]) => l.prix).map(([k, l]) => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(l.c)}"></span><div><h3>Licol ${l.nom.toLowerCase()}</h3></div></div>
+      <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${l.prix} p.</span>${mesLicols().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-licol-achat="${k}" ${etat.pieces >= l.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`).join('')}</div>`);
+  $('#contenu').querySelectorAll('[data-licol-achat]').forEach(b => b.onclick = () => { const k = b.dataset.licolAchat, l = LICOLS[k]; if (etat.pieces < l.prix || mesLicols().includes(k)) return; etat.pieces -= l.prix; mesLicols().push(k); sonPiece(); sauver(); toast(`Licol ${l.nom.toLowerCase()} acheté`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-selle]').forEach(b => b.onclick = () => { const k = b.dataset.selle, s = SELLES[k]; if (etat.pieces < s.prix || etat.selles.includes(k)) return; etat.pieces -= s.prix; etat.selles.push(k); sonPiece(); construireSellerie(); sauver(); toast(`${s.nom} : elle t’attend dans ta sellerie`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-tapis]').forEach(b => b.onclick = () => { const k = b.dataset.tapis, t = TAPIS[k]; if (etat.pieces < t.prix || etat.tapis.includes(k)) return; etat.pieces -= t.prix; etat.tapis.push(k); sonPiece(); construireSellerie(); sauver(); toast(`${t.nom} : il t’attend dans ta sellerie`, 'or'); sellier(); });
 }
@@ -3880,6 +3987,81 @@ const VIT_ALLURE = { arret: 0, pas: 1.6, trot: 3.8, galop: 6.6 };
 const PISTE = { x: (MANEGE_C.x1 + MANEGE_C.x2) / 2, z: (MANEGE_C.z1 + MANEGE_C.z2) / 2, rx: 15.5, rz: 7.5 };
 const eleves = []; // les stagiaires présents, en personnages
 let lecon = null;
+// ---- Longe : le cheval (avec licol) tourne en cercle autour de toi, au pas, au trot ou au galop, pendant 40 s.
+// Au rond de longe (le manège rond), dans la carrière ou dans un pré assez grand. Il y gagne endurance, vitesse et lien.
+let longe = null, ligneLonge = null;
+const ALLURES_LONGE = [['arret', 'Arrêt'], ['pas', 'Pas'], ['trot', 'Trot'], ['galop', 'Galop']];
+function lieuDeLonge() {
+  if (Math.hypot(J.x - MANEGE.x, J.z - MANEGE.z) < MANEGE.r) return { x: MANEGE.x, z: MANEGE.z, R: 7, nom: 'au rond de longe' };
+  const C = CARRIERE;
+  if (J.x > C.x1 + 7 && J.x < C.x2 - 7 && J.z > C.z1 + 7 && J.z < C.z2 - 7) return { x: J.x, z: J.z, R: 6, nom: 'dans la carrière' };
+  const pr = preSous(J.x, J.z);
+  if (pr) { const R = Math.min(6.5, J.x - pr.x1 - 1, pr.x2 - J.x - 1, J.z - pr.z1 - 1, pr.z2 - J.z - 1); if (R >= 4) return { x: J.x, z: J.z, R, nom: `dans le ${pr.nom}` }; }
+  return null;
+}
+function commencerLonge(r) {
+  const c = r.cheval;
+  if (!etat.aPied) { toast('Descends de cheval pour longer', 'rouge'); return; }
+  if (!c.licol) { toast(`Mets d’abord un licol à ${c.nom}`, 'rouge'); return; }
+  if (r.box) { toast(`${c.nom} est au box : mène-le en main jusqu’au rond de longe`, 'rouge'); return; }
+  if (lecon || balade || concours) { toast('Finis d’abord ton cours ou ta sortie', 'rouge'); return; }
+  const L = lieuDeLonge();
+  if (!L) { toast('Va au rond de longe (le manège rond, au sud-ouest), dans la carrière ou au milieu d’un pré assez grand', 'rouge'); return; }
+  J.x = L.x; J.z = L.z;
+  const ang = Math.atan2(r.x - L.x, r.z - L.z) || 0;
+  r.x = L.x + Math.sin(ang) * L.R; r.z = L.z + Math.cos(ang) * L.R;
+  longe = { id: c.id, x: L.x, z: L.z, R: L.R, ang, sens: 1, allure: 'pas', vit: 0, t: 0, duree: 40, xp: { endurance: 0, vitesse: 0, lien: 0 } };
+  ligneLonge = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xf3eee4 }));
+  ligneLonge.frustumCulled = false; scene.add(ligneLonge);
+  $('#longe').hidden = false; majPanneauLonge();
+  toast(`Longe de ${c.nom} ${L.nom} : choisis l’allure avec 1 à 4 ou les boutons`, 'or');
+}
+function ordonnerLonge(a) {
+  if (!longe) return;
+  if (a === 'main') { longe.sens = -longe.sens; toast('Changement de main'); }
+  else longe.allure = a;
+  majPanneauLonge();
+}
+function majPanneauLonge() {
+  if (!longe) return;
+  const c = etat.chevaux.find(h => h.id === longe.id);
+  $('#lg-titre').textContent = `Longe · ${c?.nom ?? ''}`;
+  $('#longe').querySelectorAll('[data-longe]').forEach(b => b.classList.toggle('on', b.dataset.longe === longe.allure));
+}
+function majLonge(r, dt) {
+  const L = longe, v = VIT_ALLURE[L.allure] ?? 0;
+  L.vit += (v - L.vit) * Math.min(1, dt * 2);
+  L.ang += L.sens * L.vit / L.R * dt;
+  const x = L.x + Math.sin(L.ang) * L.R, z = L.z + Math.cos(L.ang) * L.R;
+  r.rot += angleDiff(r.rot, L.ang + L.sens * Math.PI / 2) * Math.min(1, dt * 8);
+  r.x = x; r.z = z; r.vit = L.vit;
+  r.m.g.position.set(x, 0, z); r.m.g.rotation.y = r.rot; animer(r.m, L.vit, 0, false, dt);
+  const pos = ligneLonge.geometry.attributes.position;
+  pos.setXYZ(0, J.x + Math.sin(J.rot) * 0.3, 1.05, J.z + Math.cos(J.rot) * 0.3);
+  pos.setXYZ(1, x + Math.sin(r.rot) * 1.05, 1.35, z + Math.cos(r.rot) * 1.05); pos.needsUpdate = true;
+  if (L.allure !== 'arret') {
+    L.t += dt;
+    if (L.allure === 'pas') { L.xp.endurance += 0.15 * dt; L.xp.lien += 0.12 * dt; }
+    if (L.allure === 'trot') { L.xp.endurance += 0.35 * dt; L.xp.vitesse += 0.1 * dt; L.xp.lien += 0.06 * dt; }
+    if (L.allure === 'galop') { L.xp.vitesse += 0.35 * dt; L.xp.endurance += 0.2 * dt; }
+  }
+  $('#lg-temps').textContent = `${Math.max(0, Math.ceil(L.duree - L.t))} s · ${L.sens > 0 ? 'à main gauche' : 'à main droite'}`;
+  if (L.t >= L.duree) finirLonge(true);
+}
+function finirLonge(complete = false) {
+  if (!longe) return;
+  const L = longe, c = etat.chevaux.find(h => h.id === L.id), r = residents.find(x => x.cheval.id === L.id);
+  longe = null; $('#longe').hidden = true;
+  if (ligneLonge) { scene.remove(ligneLonge); ligneLonge.geometry.dispose(); ligneLonge = null; }
+  if (r) { r.vit = 0; r.trace = null; r.ancre = { x: r.x, z: r.z }; r.cible = null; r.pause = 2; if (c.lieu === 'libre') c.pos = { x: r.x, z: r.z, rot: r.rot }; }
+  if (!c) return;
+  const gains = Object.entries(L.xp).map(([k, v]) => [k, Math.round(v)]).filter(([, v]) => v > 0);
+  for (const [k, v] of gains) gagnerXp(c, k, v);
+  if (L.t > 5) { c.faim = Math.max(0, (c.faim ?? 80) - L.t / 6); c.soif = Math.max(0, (c.soif ?? 80) - L.t / 5); }
+  etat.compteurs.longes = (etat.compteurs.longes || 0) + (complete ? 1 : 0);
+  toast(complete ? `Bravo ! Séance de longe finie : ${c.nom} gagne ${gains.map(([k, v]) => `+${v} ${NOM_STAT[k].toLowerCase()}`).join(', ') || 'un peu de confiance'}` : `Longe arrêtée${gains.length ? ` : ${gains.map(([k, v]) => `+${v} ${NOM_STAT[k].toLowerCase()}`).join(', ')}` : ''}`, complete ? 'or' : '');
+  sauver();
+}
 function ficheEleve(nom) { // les fiches d'avant les niveaux 1 à 20 (0 à 2) sont converties
   const f = etat.eleves[nom] ||= { lecons: 0, niveau: 1, v: 2 };
   if (f.v !== 2) { f.niveau = 1 + (f.niveau || 0) * 4; f.v = 2; }
@@ -4047,9 +4229,15 @@ function majTemps(dt) {
   if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont au gîte');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
   if (etat.heure >= 24) { etat.heure -= 24; etat.jour++; nouveauJour(); }
+  if (Math.floor(avant * 2) !== Math.floor(etat.heure * 2)) saillies(); // toutes les demi-heures du jeu
 }
 // à minuit : chaque enfant qui a monté la veille gagne un niveau ; ceux qui n'ont pas monté boudent
+function tirerMeteo() {
+  const a = Math.random(); etat.meteo = a < 0.5 ? 'beau' : a < 0.75 ? 'brume' : 'pluie';
+  if (etat.meteo !== 'beau') setTimeout(() => toast(etat.meteo === 'brume' ? 'Jour de brume : le brouillard se lèvera un peu l’après-midi' : 'Jour de pluie : sors les imperméables !'), 2600);
+}
 function nouveauJour() {
+  tirerMeteo();
   reproduction();
   if (etat.chevaux.some(c => c.naissance && etat.jour - c.naissance <= AGE_ADULTE + 1)) majResidents();
   const hier = etat.jour - 1, tristes = [], montes = [];
@@ -4759,7 +4947,7 @@ function interactionProche() {
     if (d < 3.5 && d < bd) {
       bd = d;
       best = !etat.aPied ? { texte: () => `Monter ${r.cheval.nom}`, action: () => monter(r.cheval.id) }
-        : r === mene ? { texte: () => `Lâcher ${r.cheval.nom} ici`, action: () => lacher(r) }
+        : r === mene ? { texte: () => `S’occuper de ${r.cheval.nom} (en main)`, action: () => aupresDuCheval(r) }
         : { texte: () => `S’occuper de ${r.cheval.nom}`, action: () => aupresDuCheval(r) };
     }
   }
@@ -4786,6 +4974,7 @@ function interactionProche() {
 }
 function interagir() {
   if (ouvert()) return;
+  if (longe) { finirLonge(); return; }
   const it = interactionProche();
   if (it) it.action();
   else if (!etat.aPied) { const c = etat.chevaux.find(h => h.id === etat.actif); if (c) soigner(c); } // rien autour : soigner son cheval
@@ -4915,6 +5104,11 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') demandeSaut = true;
   // raccourcis par la lettre tapée (e.key) : sur un AZERTY, la lettre M est sur la touche physique « Semicolon »
   const l = e.key && e.key.length === 1 ? e.key.toLowerCase() : '';
+  if (longe) {
+    if (l === 'e') { finirLonge(); return; }
+    const k = /^(Digit|Numpad)[1-5]$/.test(e.code) ? +e.code.slice(-1) : 0;
+    if (k) { ordonnerLonge(k === 5 ? 'main' : ALLURES_LONGE[k - 1][0]); return; }
+  }
   if (l === 'e') interagir();
   if (l === 'h') ecurie();
   if (l === 'g') atelier();
@@ -4934,6 +5128,7 @@ $('#b-sellerie').onclick = () => atelier();
 $('#b-amenager').onclick = () => amenager();
 $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
+$('#longe').addEventListener('pointerdown', e => { const b = e.target.closest('[data-longe]'); if (!b) return; e.preventDefault(); if (b.dataset.longe === 'fin') finirLonge(); else ordonnerLonge(b.dataset.longe); });
 $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[data-ordre]'); if (b) { e.preventDefault(); ordonner(b.dataset.ordre); } });
 $('#b-aide').onclick = aide;
 $('#invite').onclick = e => { e.preventDefault(); interagir(); }; // toucher le cadre « E » = appuyer sur E
@@ -5319,7 +5514,7 @@ function majHud(dt) {
   if (etat.aPied) $('#allure').textContent = mene ? `À pied, mène ${mene.cheval.nom}` : 'À pied';
   if (etat.conduite) $('#allure').textContent = `En voiture · ${Math.round(Math.abs(VOIT.vit) * 3.6)} km/h`;
   $('#niveaux').textContent = `V${c.stats.vitesse.niv} · S${c.stats.saut.niv} · E${c.stats.endurance.niv} · L${c.stats.lien.niv}`;
-  $('#horloge').textContent = `Jour ${etat.jour} · ${heureTexte(etat.heure)}`;
+  $('#horloge').textContent = `Jour ${etat.jour} · ${heureTexte(etat.heure)}${etat.meteo && etat.meteo !== 'beau' ? ' · ' + METEO[etat.meteo] : ''}`;
   $('#pieces').textContent = etat.pieces; $('#pommes').textContent = etat.pommes;
   $('#carottes').textContent = etat.carottes; $('#fers').textContent = `${etat.fers.length}/${FERS.length}`;
   const q = QUETES[etat.quete], boite = $('#suivi-quete');
@@ -5405,9 +5600,12 @@ function dessinerCarte() {
 // ------------------------------------------------------------------ Démarrage et boucle
 function demarrer(donnees = {}) {
   etat = charger(donnees.etat);
+  for (const [k, v] of Object.entries(etat.robes || {})) ROBES[k] = v;
+  etat.meteo ||= 'beau';
   J.x = etat.pos?.[0] ?? 0; J.z = etat.pos?.[1] ?? 14; J.rot = etat.rot ?? Math.PI;
   J.y = 0; J.vy = 0; J.vit = 0; J.auSol = true;
   if (lecon) { for (const R of lecon.groupe) scene.remove(R.m.g); lecon = null; $('#lecon').hidden = true; }
+  if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
   mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); J.endu = enduMax();
