@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 19:45";</script>
+<script>window.VERSION_JEU = "2026-10-12 19:48";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -2426,7 +2426,7 @@ function majCavalier(h, dt, vit, enLair) {
 let basileModele = null;
 function remplacerHumains() {
   construireActif(); construirePieton(); majResidents();
-  rafraichirCavaliers(); construireMarchands();
+  rafraichirCavaliers(); construireMarchands(); construirePalefreniers();
   if (basileModele && HUMAIN.pret && !basileModele.humain) { // Rémy peut arriver après Amy : une seule fois, et quand il est là
     scene.remove(basileModele);
     const h = humainReel({ veste: 0x2f6fb5, bas: 0x3d5a80, cheveux: 0x2a2420 }, 'Basile · Chevaux à vendre');
@@ -3859,6 +3859,74 @@ function blocStats(stats, xp = true) {
   }).join('');
 }
 
+// ---- Palefreniers (2026-10-12) : des stagiaires d'écurie que l'on embauche (35 pièces par jour chacun). De 7 h à 19 h,
+// ils vont de cheval en cheval par les itinéraires (cheminNav) : foin, eau, brosse, couverture s'il pleut, et soins
+// des poulains. Ils gardent aussi tous les chevaux nourris et abreuvés. Payés à minuit ; sans argent, ils s'en vont.
+const PALEFRENIERS = [{ nom: 'Lucas', genre: 'm', haut: 0x3b6e8f, cheveux: 0x6b4426 }, { nom: 'Emma', genre: 'f', haut: 0xc0392b, cheveux: 0xd8b26a },
+  { nom: 'Noé', genre: 'm', haut: 0x2f9e5a, cheveux: 0x16110e }, { nom: 'Lina', genre: 'f', haut: 0x7d4fb0, cheveux: 0x3a2416 }];
+const SALAIRE = 35;
+let palefs = [];
+const mesPalefreniers = () => etat.palefreniers ||= [];
+function construirePalefreniers() {
+  for (const q of palefs) scene.remove(q.p.g);
+  palefs = mesPalefreniers().map((nom, i) => {
+    const d = PALEFRENIERS.find(x => x.nom === nom) || PALEFRENIERS[0], p = pieton(`${nom} · palefreni${d.genre === 'f' ? 'ère' : 'er'}`, d.haut, d.cheveux, d.genre);
+    const q = { nom, p, x: 2 + i * 3, z: -22, chemin: [], pause: 2 + i * 2, cheval: null }; p.g.position.set(q.x, 0, q.z); scene.add(p.g); return q;
+  });
+}
+function pointDeSoin(c) { // où se placer pour s'occuper du cheval
+  if (c.lieu === 'box' && c.box != null) {
+    if (enGrange(c.box)) return { x: (GRANGE.x1 + GRANGE.x2) / 2, z: GRANGE.z2 + 1.5 };
+    const p = BOX_PORTE(c.box); return { x: p.x, z: p.z + (c.box < BOXES.n ? 0.6 : -0.6) };
+  }
+  const r = residents.find(x => x.cheval === c); if (!r) return null;
+  const pr = c.lieu === 'pre' ? prePar(c.pre) : null;
+  if (!pr) return { x: r.x + 1.5, z: r.z + 1.5 };
+  const bords = [[pr.x1 - 1.2, clamp(r.z, pr.z1 + 1, pr.z2 - 1)], [pr.x2 + 1.2, clamp(r.z, pr.z1 + 1, pr.z2 - 1)], [clamp(r.x, pr.x1 + 1, pr.x2 - 1), pr.z1 - 1.2], [clamp(r.x, pr.x1 + 1, pr.x2 - 1), pr.z2 + 1.2]];
+  bords.sort((a, b) => Math.hypot(a[0] - r.x, a[1] - r.z) - Math.hypot(b[0] - r.x, b[1] - r.z));
+  return { x: bords[0][0], z: bords[0][1] };
+}
+function soinPalefrenier(q, c) {
+  c.faim = Math.min(100, Math.max(c.faim ?? 80, 70) + 25); c.soif = Math.min(100, Math.max(c.soif ?? 80, 70) + 30);
+  if ((derniersSoins[c.id + 'palef'] ?? -999) < maintenant() - 120) { derniersSoins[c.id + 'palef'] = maintenant(); gagnerXp(c, 'lien', 2); }
+  if (poulain(c)) c.elevage = Math.min(100, (c.elevage || 0) + 3);
+  if (etat.meteo === 'pluie' && c.lieu !== 'box' && !c.couverture) {
+    const libre = mesCouvertures().find(k => !etat.chevaux.some(h => h.couverture === k));
+    if (libre) { c.couverture = libre; majResidents(); toast(`${q.nom} met une couverture à ${c.nom} : il pleut`); }
+  }
+}
+function majPalefreniers(dt) {
+  const jour = etat.heure >= 7 && etat.heure < 19;
+  for (const q of palefs) {
+    q.p.g.visible = jour && Math.hypot(camera.position.x - q.x, camera.position.z - q.z) < 120;
+    if (!jour) continue;
+    if (q.chemin.length) {
+      const c = q.chemin[0], dx = c.x - q.x, dz = c.z - q.z, d = Math.hypot(dx, dz), v = 1.6;
+      if (d <= v * dt) { q.x = c.x; q.z = c.z; q.chemin.shift(); if (!q.chemin.length) { q.pause = rand(5, 9); if (q.cheval) soinPalefrenier(q, q.cheval); } }
+      else { q.x += dx / d * v * dt; q.z += dz / d * v * dt; q.p.g.rotation.y = Math.atan2(dx, dz); }
+      marcher(q.p, v, dt); q.p.g.position.set(q.x, 0, q.z); continue;
+    }
+    marcher(q.p, 0, dt);
+    if (q.cheval) { const r = residents.find(x => x.cheval === q.cheval); const cx = r ? r.x : BOX_POS(q.cheval.box ?? 0).x, cz = r ? r.z : BOX_POS(q.cheval.box ?? 0).z; q.p.g.rotation.y += angleDiff(q.p.g.rotation.y, Math.atan2(cx - q.x, cz - q.z)) * Math.min(1, dt * 4); }
+    if ((q.pause -= dt) > 0) continue;
+    // le cheval le plus en besoin (que les autres palefreniers ne visent pas déjà), au hasard s'il y en a plusieurs
+    const pris = new Set(palefs.filter(o => o !== q).map(o => o.cheval));
+    const choix = etat.chevaux.filter(c => !pris.has(c) && c.lieu !== 'van' && !(c.id === etat.actif && !etat.aPied) && !(longe && longe.id === c.id) && mene?.cheval !== c);
+    if (!choix.length) { q.pause = 5; continue; }
+    choix.sort((a, b) => ((a.faim ?? 80) + (a.soif ?? 80) + (poulain(a) ? -40 : 0)) - ((b.faim ?? 80) + (b.soif ?? 80) + (poulain(b) ? -40 : 0)) + rand(-25, 25));
+    const c = choix[0], pt = pointDeSoin(c);
+    if (!pt) { q.pause = 3; continue; }
+    q.cheval = c; q.chemin = cheminNav(q.x, q.z, pt.x, pt.z);
+  }
+}
+function payerPalefreniers() {
+  const l = mesPalefreniers(); if (!l.length) return;
+  const partis = [];
+  while (l.length && etat.pieces < l.length * SALAIRE) partis.push(l.pop());
+  etat.pieces -= l.length * SALAIRE;
+  if (l.length) setTimeout(() => toast(`Salaire de ${l.join(', ')} : ${l.length * SALAIRE} pièces`), 3400);
+  if (partis.length) { setTimeout(() => toast(`Pas assez de pièces : ${partis.join(', ')} ${partis.length > 1 ? 'sont partis' : 'est parti'}`, 'rouge'), 3600); construirePalefreniers(); }
+}
 function ecurie() {
   const html = etat.chevaux.map(c => {
     const actif = c.id === etat.actif && !etat.aPied;
@@ -3881,7 +3949,12 @@ function ecurie() {
   }).join('');
   ouvrir(`<div class="pnj">Ton écurie · ${etat.chevaux.length} ${etat.chevaux.length > 1 ? 'chevaux' : 'cheval'}</div><h2>Tes chevaux</h2>
     <p>Choisis le cheval que tu montes. Les autres sont au box, au pré ou en liberté là où tu les as laissés ; pense à leur faim et à leur soif. Une friandise renforce le lien, et un cheval qui a confiance refuse moins les obstacles.</p>
+    <h3 class="section">Palefreniers · ${SALAIRE} pièces par jour chacun</h3>
+    <p class="note">De 7 h à 19 h, ils donnent foin et eau, brossent, mettent les couvertures quand il pleut et s’occupent des poulains. Payés chaque nuit.</p>
+    <div class="boutons">${PALEFRENIERS.map(d => mesPalefreniers().includes(d.nom) ? `<button class="btn" data-renvoyer="${d.nom}">${d.nom} travaille ici · le renvoyer</button>` : `<button class="btn or" data-embaucher="${d.nom}" ${etat.pieces >= SALAIRE ? '' : 'disabled'}>Embaucher ${d.nom}</button>`).join('')}</div>
     <div class="grille">${html}</div>`);
+  $('#contenu').querySelectorAll('[data-embaucher]').forEach(b => b.onclick = () => { mesPalefreniers().push(b.dataset.embaucher); construirePalefreniers(); sauver(); toast(`${b.dataset.embaucher} est embauché${PALEFRENIERS.find(d => d.nom === b.dataset.embaucher).genre === 'f' ? 'e' : ''} : soins des chevaux de 7 h à 19 h`, 'or'); ecurie(); });
+  $('#contenu').querySelectorAll('[data-renvoyer]').forEach(b => b.onclick = () => { const l = mesPalefreniers(); l.splice(l.indexOf(b.dataset.renvoyer), 1); construirePalefreniers(); sauver(); toast(`${b.dataset.renvoyer} est parti`); ecurie(); });
   $('#contenu').querySelectorAll('[data-monter]').forEach(b => b.onclick = () => { monter(b.dataset.monter); ecurie(); });
   $('#contenu').querySelectorAll('[data-lieu]').forEach(b => b.onclick = () => { const c = etat.chevaux.find(h => h.id === b.dataset.lieu);
     if (c.lieu !== 'box') { c.lieu = 'box'; if (mene?.cheval === c) mene = null; }
@@ -4348,7 +4421,10 @@ function majTemps(dt) {
   if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont au gîte');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
   if (etat.heure >= 24) { etat.heure -= 24; etat.jour++; nouveauJour(); }
-  if (Math.floor(avant * 2) !== Math.floor(etat.heure * 2)) saillies(); // toutes les demi-heures du jeu
+  if (Math.floor(avant * 2) !== Math.floor(etat.heure * 2)) { // toutes les demi-heures du jeu
+    saillies();
+    if (palefs.length && etat.heure >= 7 && etat.heure < 19) for (const c of etat.chevaux) { c.faim = Math.max(c.faim ?? 80, 55); c.soif = Math.max(c.soif ?? 80, 55); }
+  }
 }
 // à minuit : chaque enfant qui a monté la veille gagne un niveau ; ceux qui n'ont pas monté boudent
 function tirerMeteo() {
@@ -4359,6 +4435,7 @@ function tirerMeteo() {
 }
 function nouveauJour() {
   tirerMeteo();
+  payerPalefreniers();
   reproduction();
   if (etat.chevaux.some(c => c.naissance && etat.jour - c.naissance <= AGE_ADULTE + 1)) majResidents();
   const hier = etat.jour - 1, tristes = [], montes = [];
@@ -5516,6 +5593,7 @@ function majMonde(dt, t) {
     if (o.tombe <= 0 && !parcours.actif) { o.tombe = 0; o.barre.position.set(0, o.barreY, 0); o.barre.rotation.set(0, 0, 0); }
     else { o.tombe = Math.max(o.tombe, 0.01); o.barre.position.y += (0.08 - o.barre.position.y) * Math.min(1, dt * 6); o.barre.position.z = 0.6; o.barre.rotation.y = 0.15; }
   }
+  majPalefreniers(dt);
   for (const r of residents) {
     if (r.box) { r.t += dt; vieBox(r, r.cheval.box, dt); continue; }
     majResident(r, dt);
@@ -5730,7 +5808,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
