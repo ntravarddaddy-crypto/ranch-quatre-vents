@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 18:59";</script>
+<script>window.VERSION_JEU = "2026-10-12 19:04";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -324,6 +324,12 @@ const NOM_STAT = Object.fromEntries(STATS);
 const LICOLS = { rouge: { nom: 'Rouge', c: 0xc0392b, prix: 0 }, bleu: { nom: 'Bleu', c: 0x2f6fb5, prix: 15 }, rose: { nom: 'Rose', c: 0xe77fb3, prix: 15 },
   vert: { nom: 'Vert', c: 0x2f9e5a, prix: 15 }, violet: { nom: 'Violet', c: 0x7d4fb0, prix: 20 }, jaune: { nom: 'Jaune', c: 0xf3b52d, prix: 20 }, noir: { nom: 'Noir', c: 0x222222, prix: 15 } };
 const mesLicols = () => etat.licols ||= ['rouge'];
+// couvertures (2026-10-12) : pour les chevaux laissés dehors ; achetées chez Lucien, c.couverture = celle qu'il porte
+const COUVERTURES = { marine: { nom: 'Bleu marine', c: 0x22335a, motif: 'uni', prix: 40 }, bordeaux: { nom: 'Bordeaux', c: 0x7a2230, motif: 'uni', prix: 40 },
+  sapin: { nom: 'Vert sapin', c: 0x2f5a3a, motif: 'uni', prix: 40 }, rose: { nom: 'Rose', c: 0xd9709f, motif: 'uni', prix: 45 },
+  violet: { nom: 'Violette', c: 0x6a4a9c, motif: 'uni', prix: 45 }, ecossaise: { nom: 'Écossaise', c: 0x8a2a2a, motif: 'ecossais', prix: 60 },
+  etoiles: { nom: 'Étoilée', c: 0x26407a, motif: 'etoiles', prix: 70 } };
+const mesCouvertures = () => etat.couvertures ||= [];
 // Races : taille (1 = cheval de 1,60 m), carrure, longueur des jambes, crins longs, fanons
 const RACES = {
   'Poney de selle':      { robe: 'palomino', taille: 0.94, forme: { largeur: 1.05, jambes: 0.9 } },
@@ -1889,6 +1895,7 @@ function modeleCheval(spec, monte, tenueForcee = null) {
     const k = taille < 0.9 ? Math.pow(1 / taille, 0.7) : 1;
     cavalier = poserCavalier(corps, new THREE.Vector3(0, 1.66, 0.05), tenueForcee || etat?.tenue || {}, k, larg);
   }
+  if (!monte && COUVERTURES[spec.couverture]) couvrir(corps, spec.couverture);
   if (!monte && LICOLS[spec.licol]) { // licol : muserolle et têtière de couleur
     const b = robeMat(LICOLS[spec.licol].c, 0.6);
     maille(geoMors, b, 0, -0.03, 0.5, tete).scale.set(0.85, 1.0, 1.4); maille(geoMors, b, 0, 0.0, 0.02, tete).scale.set(1.3, 1.9, 1.4);
@@ -1919,6 +1926,18 @@ function cavaliere(tenue) {
   maille(geoDemiSphere, casque, 0, 0.75, 0.06, cav).scale.set(0.13, 0.12, 0.14);
   ovo(0.1, 0.015, 0.06, casque, 0, 0.75, 0.2, cav);
   return cav;
+}
+// couverture : une demi-coque d'étoffe sur le dos et les flancs, repère du cheval dessiné (dos à 1,62 m, ventre au-dessous de 0,9 m)
+const matsCouv = {}, COUV = { r: 0.46, l: 1.68, y: 1.14, z: -0.14, a: 2.35, pente: 0.13 }; // d'après les os du vrai cheval : garrot z 0,48, queue z -0,95
+function couvrir(corps, k) {
+  const d = COUVERTURES[k]; if (!d) return;
+  const m = matsCouv[k] ||= (() => { const x = matTapis(d.c, d.motif).clone(); x.side = THREE.DoubleSide; return x; })();
+  const R = COUV.r, L = COUV.l, a = COUV.a, g = new THREE.Group(); g.position.set(0, COUV.y, COUV.z); g.rotation.x = -COUV.pente; corps.add(g);
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 28, 1, true, Math.PI - a, 2 * a), m);
+  c.rotation.x = Math.PI / 2; c.castShadow = true; g.add(c);
+  const liseré = robeMat(0xf3eee4, 0.7);
+  for (const zz of [-L / 2, L / 2]) { const t = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 6, 28, 2 * a), liseré); t.rotation.z = Math.PI / 2 - a; t.position.z = zz; g.add(t); }
+  ovo(R * 0.9, R * 0.85, 0.035, robeMat(0x2b2f33, 0.6), 0, -0.08, L / 2 + 0.06, g); // sangle de poitrail
 }
 // Selle, tapis, sangle et bride, selon le modèle de selle et les couleurs choisies (sans tête : pas de bride)
 function harnacher(corps, tete, e, sangle = true) {
@@ -2130,6 +2149,11 @@ function modeleReel(spec, monte, tenueForcee) {
   const mixer = new THREE.AnimationMixer(modele), actions = {};
   for (const [k, c] of Object.entries(REEL.clips)) actions[k] = mixer.clipAction(c);
   const m = { reel: true, g, modele, mixer, actions, courante: null, special: null, enVol: false, nage: false };
+  if (!monte && COUVERTURES[spec.couverture]) {
+    const S = REEL.siege, siege = new THREE.Group(), largeur = new THREE.Group(), h = new THREE.Group();
+    siege.position.copy(S.pos); siege.quaternion.copy(S.quat); siege.scale.copy(S.sc); os[S.os].add(siege);
+    largeur.scale.x = REEL.dosLarg / 0.35; h.position.set(0, -1.645, -0.07); couvrir(h, spec.couverture); largeur.add(h); siege.add(largeur);
+  }
   if (monte) {
     const S = REEL.siege, siege = new THREE.Group();
     siege.position.copy(S.pos); siege.quaternion.copy(S.quat); siege.scale.copy(S.sc); os[S.os].add(siege);
@@ -2925,7 +2949,16 @@ function aupresDuCheval(r) {
     <h3 class="section">Licol${c.licol ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
     <div class="boutons">${mesLicols().map(k => `<button class="btn ${c.licol === k ? 'or' : ''}" data-licol="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(LICOLS[k].c)}"></span>${LICOLS[k].nom}</button>`).join('')}
       ${c.licol ? '<button class="btn" data-licol="">Enlever le licol</button>' : ''}</div>
-    <p class="note">D’autres couleurs de licol chez Lucien, le sellier du marché.</p>`);
+    <p class="note">D’autres couleurs de licol chez Lucien, le sellier du marché.</p>
+    <h3 class="section">Couverture${c.couverture ? ` : ${COUVERTURES[c.couverture]?.nom.toLowerCase()}` : ''}</h3>
+    ${mesCouvertures().length ? `<div class="boutons">${mesCouvertures().map(k => `<button class="btn ${c.couverture === k ? 'or' : ''}" data-couv="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(COUVERTURES[k].c)}"></span>${COUVERTURES[k].nom}</button>`).join('')}
+      ${c.couverture ? '<button class="btn" data-couv="">Enlever la couverture</button>' : ''}</div>` : '<p class="note">Tu n’as pas encore de couverture : Lucien en vend au marché.</p>'}`);
+  $('#contenu').querySelectorAll('[data-couv]').forEach(b => b.onclick = () => {
+    const k = b.dataset.couv || null;
+    if (k && etat.chevaux.some(h => h !== c && h.couverture === k)) { const autre = etat.chevaux.find(h => h !== c && h.couverture === k); autre.couverture = null; toast(`La couverture passe de ${autre.nom} à ${c.nom}`); }
+    c.couverture = k; if (k) toast(`${c.nom} a sa couverture ${COUVERTURES[k].nom.toLowerCase()}`); else toast(`Couverture enlevée à ${c.nom}`);
+    majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
+  });
   $('#contenu').querySelectorAll('[data-licol]').forEach(b => b.onclick = () => {
     c.licol = b.dataset.licol || null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
@@ -3694,12 +3727,16 @@ function sellier() {
     return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${apercu ? `url(${apercu}) center/cover` : hex(e.cTapis)}"></span><div><h3>${t.nom}</h3><small>à la couleur de ton choix</small></div></div>
     <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${t.prix} p.</span>${etat.tapis.includes(k) ? '<button class="btn" disabled>Dans ta sellerie</button>' : `<button class="btn or" data-tapis="${k}" ${etat.pieces >= t.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`;
   }).join('');
-  ouvrir(`<div class="pnj">Lucien · sellier · marché du village</div><h2>Selles, tapis et licols</h2>
+  ouvrir(`<div class="pnj">Lucien · sellier · marché du village</div><h2>Selles, tapis, licols et couvertures</h2>
     <p>Tu as <b>${etat.pieces} pièces</b>. Ce que tu achètes rejoint ta sellerie, dans la grange du ranch : tu l’y choisis pour chacun de tes chevaux.</p>
     <h3 class="section">Selles</h3><div class="grille">${selles}</div><h3 class="section">Tapis de selle</h3><div class="grille">${tapis}</div>
     <h3 class="section">Licols</h3><p class="note">Pour mener tes chevaux en main et les longer. Tu le mets à ton cheval avec E, à côté de lui.</p>
     <div class="grille">${Object.entries(LICOLS).filter(([, l]) => l.prix).map(([k, l]) => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(l.c)}"></span><div><h3>Licol ${l.nom.toLowerCase()}</h3></div></div>
-      <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${l.prix} p.</span>${mesLicols().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-licol-achat="${k}" ${etat.pieces >= l.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`).join('')}</div>`);
+      <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${l.prix} p.</span>${mesLicols().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-licol-achat="${k}" ${etat.pieces >= l.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`).join('')}</div>
+    <h3 class="section">Couvertures</h3><p class="note">Pour tes chevaux qui restent dehors, au pré ou en liberté, quand il pleut ou la nuit. Tu la mets avec E, à côté du cheval.</p>
+    <div class="grille">${Object.entries(COUVERTURES).map(([k, d]) => { const ap = matTapis(d.c, d.motif).map?.image?.toDataURL?.() || ''; return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${ap ? `url(${ap}) center/cover` : hex(d.c)}"></span><div><h3>Couverture ${d.nom.toLowerCase()}</h3></div></div>
+      <div class="boutons" style="align-items:center;justify-content:space-between"><span class="prix">${d.prix} p.</span>${mesCouvertures().includes(k) ? '<button class="btn" disabled>À toi</button>' : `<button class="btn or" data-couv-achat="${k}" ${etat.pieces >= d.prix ? '' : 'disabled'}>Acheter</button>`}</div></article>`; }).join('')}</div>`);
+  $('#contenu').querySelectorAll('[data-couv-achat]').forEach(b => b.onclick = () => { const k = b.dataset.couvAchat, d = COUVERTURES[k]; if (etat.pieces < d.prix || mesCouvertures().includes(k)) return; etat.pieces -= d.prix; mesCouvertures().push(k); sonPiece(); sauver(); toast(`Couverture ${d.nom.toLowerCase()} achetée`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-licol-achat]').forEach(b => b.onclick = () => { const k = b.dataset.licolAchat, l = LICOLS[k]; if (etat.pieces < l.prix || mesLicols().includes(k)) return; etat.pieces -= l.prix; mesLicols().push(k); sonPiece(); sauver(); toast(`Licol ${l.nom.toLowerCase()} acheté`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-selle]').forEach(b => b.onclick = () => { const k = b.dataset.selle, s = SELLES[k]; if (etat.pieces < s.prix || etat.selles.includes(k)) return; etat.pieces -= s.prix; etat.selles.push(k); sonPiece(); construireSellerie(); sauver(); toast(`${s.nom} : elle t’attend dans ta sellerie`, 'or'); sellier(); });
   $('#contenu').querySelectorAll('[data-tapis]').forEach(b => b.onclick = () => { const k = b.dataset.tapis, t = TAPIS[k]; if (etat.pieces < t.prix || etat.tapis.includes(k)) return; etat.pieces -= t.prix; etat.tapis.push(k); sonPiece(); construireSellerie(); sauver(); toast(`${t.nom} : il t’attend dans ta sellerie`, 'or'); sellier(); });
@@ -4015,16 +4052,22 @@ function lieuDeLonge() {
   if (J.x > C.x1 + 7 && J.x < C.x2 - 7 && J.z > C.z1 + 7 && J.z < C.z2 - 7) return { x: J.x, z: J.z, R: 6, nom: 'dans la carrière' };
   const pr = preSous(J.x, J.z);
   if (pr) { const R = Math.min(6.5, J.x - pr.x1 - 1, pr.x2 - J.x - 1, J.z - pr.z1 - 1, pr.z2 - J.z - 1); if (R >= 4) return { x: J.x, z: J.z, R, nom: `dans le ${pr.nom}` }; }
+  // ailleurs (depuis le 2026-10-12) : le cercle s'arrête à 1 m des clôtures, murs, bâtiments et arbres
+  let R = 6;
+  for (const sg of segs) { const q = pointSeg(J.x, J.z, sg); R = Math.min(R, Math.hypot(q.x - J.x, q.z - J.z) - 1); }
+  for (const a of arbres) R = Math.min(R, Math.hypot(a.x - J.x, a.z - J.z) - 0.4 * a.s - 1.2);
+  for (const b of BATIS.concat([ECURIE, MAISON])) R = Math.min(R, Math.max(Math.abs(J.x - b.x) - b.hx, Math.abs(J.z - b.z) - b.hz) - 1);
+  if (R >= 3.5) return { x: J.x, z: J.z, R, nom: 'ici' };
   return null;
 }
 function commencerLonge(r) {
   const c = r.cheval;
   if (!etat.aPied) { toast('Descends de cheval pour longer', 'rouge'); return; }
   if (!c.licol) { toast(`Mets d’abord un licol à ${c.nom}`, 'rouge'); return; }
-  if (r.box) { toast(`${c.nom} est au box : mène-le en main jusqu’au rond de longe`, 'rouge'); return; }
+  if (r.box) { toast(`${c.nom} est au box : sors-le d’abord (Mener en main, ou l’Écurie)`, 'rouge'); return; }
   if (lecon || balade || concours) { toast('Finis d’abord ton cours ou ta sortie', 'rouge'); return; }
   const L = lieuDeLonge();
-  if (!L) { toast('Va au rond de longe (le manège rond, au sud-ouest), dans la carrière ou au milieu d’un pré assez grand', 'rouge'); return; }
+  if (!L) { toast('Pas assez de place ici pour longer : éloigne-toi un peu des clôtures, des arbres et des bâtiments', 'rouge'); return; }
   J.x = L.x; J.z = L.z;
   const ang = Math.atan2(r.x - L.x, r.z - L.z) || 0;
   r.x = L.x + Math.sin(ang) * L.R; r.z = L.z + Math.cos(ang) * L.R;
@@ -4253,6 +4296,8 @@ function majTemps(dt) {
 function tirerMeteo() {
   const a = Math.random(); etat.meteo = a < 0.5 ? 'beau' : a < 0.75 ? 'brume' : 'pluie';
   if (etat.meteo !== 'beau') setTimeout(() => toast(etat.meteo === 'brume' ? 'Jour de brume : le brouillard se lèvera un peu l’après-midi' : 'Jour de pluie : sors les imperméables !'), 2600);
+  const nus = etat.chevaux.filter(c => (c.lieu === 'pre' || c.lieu === 'libre') && !c.couverture).map(c => c.nom);
+  if (etat.meteo === 'pluie' && nus.length) setTimeout(() => toast(`Il pleut : ${nus.join(', ')} ${nus.length > 1 ? 'sont' : 'est'} dehors sans couverture`, 'rouge'), 4200);
 }
 function nouveauJour() {
   tirerMeteo();
