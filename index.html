@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 18:22";</script>
+<script>window.VERSION_JEU = "2026-10-12 18:25";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4769,7 +4769,6 @@ function aide() {
 function sauvegardes() {
   sauver();
   const texte = JSON.stringify(etat), jour = new Date().toISOString().slice(0, 10);
-  const resume = e => `${e.chevaux.length} ${e.chevaux.length > 1 ? 'chevaux' : 'cheval'}, ${e.pieces} pièces, jour ${e.jour ?? 1}, quête ${(e.quete ?? 0) + 1}`;
   ouvrir(`<div class="pnj">Ta partie</div><h2>Enregistrer ou reprendre</h2>
     <p>Ta partie actuelle : <b>${resume(etat)}</b>.</p>
     <p>Chaque appareil garde sa propre sauvegarde. Pour continuer ailleurs (du PC au téléphone par exemple), enregistre ta partie dans un fichier ici, copie ce fichier sur l'autre appareil, puis reprends-la là-bas.</p>
@@ -5361,4 +5360,20 @@ const lancer = d => { demarrer(d || {}); for (let i = 0; i < 4; i++) creerSauvag
 addEventListener('pagehide', () => sauver());
 const hot = window.claude?.hot;
 if (hot?.ready) hot.ready(lancer); else lancer(hot?.data ?? {});
+const resume = e => `${e.chevaux.length} ${e.chevaux.length > 1 ? 'chevaux' : 'cheval'}, ${e.pieces} pièces, jour ${e.jour ?? 1}, quête ${(e.quete ?? 0) + 1}`;
+// « ?partie=pc » : reprendre une partie déposée à côté du jeu (parties/pc.json), pour passer une partie
+// du PC au téléphone sans manipuler de fichier : l'import par fichier n'aboutissait pas sur le téléphone (2026-10-12)
+{ const nom = new URLSearchParams(location.search).get('partie');
+  if (nom && /^[a-z0-9-]{1,30}$/.test(nom)) fetch(`parties/${nom}.json`, { cache: 'no-store' }).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(brut => {
+    const e = JSON.parse(brut);
+    if (!e || e.v !== 1 || !Array.isArray(e.chevaux) || !e.chevaux.length) throw 'partie illisible';
+    ouvrir(`<div class="pnj">Partie à reprendre</div><h2>Reprendre ta partie ?</h2>
+      <p><b>${resume(e)}</b> · ${e.chevaux.map(c => c.nom).join(', ')}</p>
+      <p class="note">La partie de cet appareil sera remplacée par celle-ci.</p>
+      <div class="boutons"><button class="btn or gros" id="prendre">Oui, reprendre cette partie</button><button class="btn" id="garder">Non, garder la mienne</button></div>`);
+    const fin = () => history.replaceState(null, '', location.pathname);
+    $('#prendre').onclick = () => { try { localStorage.setItem(CLE, brut); } catch { } demarrer({ etat: e }); fermer(); fin(); toast(`Partie reprise : ${resume(e)}`, 'or'); sauver(); };
+    $('#garder').onclick = () => { fermer(); fin(); };
+  }).catch(err => toast('Partie introuvable (' + err + ') : vérifie internet', 'rouge'));
+}
 </script>
