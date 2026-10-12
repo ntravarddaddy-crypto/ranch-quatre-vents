@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 18:49";</script>
+<script>window.VERSION_JEU = "2026-10-12 18:59";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -2002,10 +2002,24 @@ function chargerChevalReel() {
     REEL.pret = true; remplacerModeles();
   }, err => echecModele('du cheval', err));
 }
+// Le modèle n'a pas de trot : on le fabrique depuis le pas en décalant les antérieurs dans le temps, pour que les
+// jambes aillent par paires diagonales (antérieur gauche avec postérieur droit). Phases avant-arrière des sabots mesurées
+// le 2026-10-12 (cycle de 1) : au pas, PG 0,21, AG 0,36, PD 0,65, AD 0,90 ; décalages réglés pour AG ≈ PD et AD ≈ PG.
+function clipTrot(pas) {
+  const dur = pas.duration, decale = nom => /^BN_L_(Clavicle|UpperArm|Hand|Toe_042)|^BN_l_Forearm/.test(nom) ? 0.26 : /^BN_R_(Clavicle|UpperArm|Forearm|Hand|Toe_047)/.test(nom) ? 0.275 : 0;
+  const pistes = pas.tracks.map(t => {
+    const d = decale(t.name.split('.')[0]) * dur; if (!d) return t.clone();
+    const it = t.createInterpolant(), k = t.getValueSize(), N = 61, temps = new Float32Array(N), val = new Float32Array(N * k);
+    for (let i = 0; i < N; i++) { temps[i] = dur * i / (N - 1); const v = it.evaluate((((temps[i] - d) % dur) + dur) % dur); for (let j = 0; j < k; j++) val[i * k + j] = v[j]; }
+    return new t.constructor(t.name, temps, val);
+  });
+  return new THREE.AnimationClip('trot', dur, pistes);
+}
 // mesures prises une fois sur le modèle au repos : échelle, hauteur du dos, siège, canons
 function preparerReel(gl) {
   const ref = gl.scene, g0 = new THREE.Group(); g0.add(ref);
   REEL.gltf = gl; REEL.clips = Object.fromEntries(gl.animations.map(c => [c.name, c]));
+  REEL.clips.trot = clipTrot(REEL.clips.pas);
   const mixer = new THREE.AnimationMixer(ref);
   mixer.clipAction(REEL.clips.repos).play(); mixer.setTime(0.5); g0.updateMatrixWorld(true);
   let corps, selle;
@@ -2145,7 +2159,7 @@ function jouerReel(m, nom, vitesse = 1, fondu = 0.3, unique = false) {
   if (m.courante) a.crossFadeFrom(m.courante, fondu, false);
   m.courante = a; return a;
 }
-// allures : pas, puis galop (le modèle n'a pas d'animation de trot) ; saut calé sur la durée du vol ; nage dans le lac
+// allures : pas, trot (fabriqué par clipTrot), galop ; saut calé sur la durée du vol ; nage dans le lac
 function animerReel(m, vit, vy, enLair, dt, broute) {
   const v = Math.abs(vit);
   if (enLair) {
@@ -2161,8 +2175,12 @@ function animerReel(m, vit, vy, enLair, dt, broute) {
     m.special = null;
     if (m.nage) jouerReel(m, 'nager', 1, 0.4);
     else if (v < 0.25) jouerReel(m, broute ? 'brouter' : 'repos', 1, 0.5);
-    else if (v < 3.2) jouerReel(m, 'pas', clamp(v / 1.5, 0.5, 2), 0.35);
+    else if (v < 3.0) jouerReel(m, 'pas', clamp(v / 1.5, 0.5, 2), 0.35);
+    else if (v < 8) jouerReel(m, 'trot', clamp(0.9 + v * 0.15, 1.2, 2.1), 0.3);
     else jouerReel(m, 'galop', clamp(0.55 + v / 14, 0.65, 1.6), 0.35);
+    // au trot, le corps rebondit deux fois par foulée
+    const a = m.courante === m.actions.trot && m.actions.trot;
+    m.modele.position.y = REEL.baseY + (a ? 0.05 * (0.5 + 0.5 * Math.cos(4 * Math.PI * a.time / a.getClip().duration)) * clamp((v - 3) / 1.5, 0, 1) : 0);
   }
   m.mixer.update(dt);
 }
@@ -3983,7 +4001,7 @@ function niveauDe(n) {
 }
 const OBJ_TEXTE = { pas: 'apprendre le pas', trot: 'apprendre le trot', galop: 'travailler le galop', saut: 'sauter une barre' };
 const ORDRES = [['arret', 'Arrêt'], ['pas', 'Pas'], ['trot', 'Trot'], ['galop', 'Galop'], ['saut', 'Saut']];
-const VIT_ALLURE = { arret: 0, pas: 1.6, trot: 3.8, galop: 6.6 };
+const VIT_ALLURE = { arret: 0, pas: 1.6, trot: 3.8, galop: 8.4 }; // galop au-dessus de 8 m/s : en dessous, le vrai cheval trotte
 const PISTE = { x: (MANEGE_C.x1 + MANEGE_C.x2) / 2, z: (MANEGE_C.z1 + MANEGE_C.z2) / 2, rx: 15.5, rz: 7.5 };
 const eleves = []; // les stagiaires présents, en personnages
 let lecon = null;
