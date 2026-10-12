@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-11 22:23";</script>
+<script>window.VERSION_JEU = "2026-10-12 18:22";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -74,7 +74,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .toast.rouge{border-color:var(--rouge)}
 .toast.part{opacity:0;transform:translateY(-10px)}
 @keyframes entre{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
-#invite{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(28px + env(safe-area-inset-bottom,0px));font-weight:800;font-size:15px;white-space:nowrap}
+#invite{cursor:pointer;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(28px + env(safe-area-inset-bottom,0px));font-weight:800;font-size:15px;white-space:nowrap}
 #invite kbd{font-size:13px;margin:0 6px 0 0;background:var(--or);color:var(--bois)}
 
 #tactile{position:absolute;inset:auto 0 0 0;height:0}
@@ -3575,6 +3575,7 @@ function ecurie() {
         <button class="btn" data-perso="${c.id}">Personnaliser</button>
         ${actif ? '' : `<button class="btn" data-repro="${c.id}">${c.lieu === 'pre' && c.pre === 'repro' ? 'Sortir de la reproduction' : 'Au paddock de reproduction'}</button>`}
         ${actif || c.box == null ? '' : `<button class="btn" data-lieu="${c.id}">${c.lieu === 'box' ? 'Sortir au pré' : 'Rentrer au box'}</button>`}
+        ${!actif && c.lieu === 'libre' ? `<button class="btn or" data-revenir="${c.id}">Faire revenir au ranch</button>` : ''}
         <button class="btn" data-nourrir="carotte" data-id="${c.id}" ${etat.carottes ? '' : 'disabled'}>Carotte (${etat.carottes})</button>
         <button class="btn" data-nourrir="pomme" data-id="${c.id}" ${etat.pommes ? '' : 'disabled'}>Pomme (${etat.pommes})</button>
       </div></article>`;
@@ -3587,6 +3588,12 @@ function ecurie() {
     if (c.lieu !== 'box') { c.lieu = 'box'; if (mene?.cheval === c) mene = null; }
     else if (!etat.pres.length) { toast('Tu n’as aucun pré : construis-en un avec Aménager (B)', 'rouge'); return; }
     else { c.lieu = 'pre'; c.pre = etat.pres[0].id; c.pos = null; }
+    majResidents(); sauver(); ecurie(); });
+  $('#contenu').querySelectorAll('[data-revenir]').forEach(b => b.onclick = () => { const c = etat.chevaux.find(h => h.id === b.dataset.revenir);
+    if (mene?.cheval === c) mene = null; c.fugue = null; c.pos = null;
+    if (c.box != null) c.lieu = 'box'; else if (etat.pres.length) { c.lieu = 'pre'; c.pre = etat.pres[0].id; }
+    else { c.lieu = 'libre'; c.pos = { x: J.x + 3, z: J.z + 3, rot: 0 }; }
+    toast(`${c.nom} est revenu ${c.lieu === 'box' ? 'dans son box' : c.lieu === 'pre' ? 'au pré' : 'près de toi'}`);
     majResidents(); sauver(); ecurie(); });
   $('#contenu').querySelectorAll('[data-repro]').forEach(b => b.onclick = () => { const c = etat.chevaux.find(h => h.id === b.dataset.repro);
     if (c.lieu === 'pre' && c.pre === 'repro') c.lieu = c.box != null ? 'box' : 'pre', c.pre = c.lieu === 'pre' ? 'p1' : c.pre;
@@ -3721,7 +3728,7 @@ function soigner(c) {
     const reste = Math.ceil(120 - (t - (derniersSoins[c.id + k] ?? -999)));
     return `<button class="btn ${reste > 0 ? '' : 'or'}" data-soin="${k}" ${reste > 0 ? 'disabled' : ''}>${l}${reste > 0 ? ` · encore ${reste} s` : ` · +${xp} lien`}</button>`;
   }).join('');
-  ouvrir(`<div class="pnj">Box ${c.box + 1} · ${c.race}</div><h2>Prendre soin de ${c.nom}</h2>
+  ouvrir(`<div class="pnj">${c.box != null ? `Box ${c.box + 1}` : 'Ton cheval'} · ${c.race}</div><h2>Prendre soin de ${c.nom}</h2>
     <p>Les soins renforcent le lien : un cheval confiant refuse moins les obstacles et rassure les élèves débutants. Chaque soin peut se refaire au bout de deux minutes.</p>
     ${besoinsHtml(c)}${blocStats(c.stats)}<div class="boutons" style="margin-top:12px">${boutons}</div>
     <div class="boutons" style="margin-top:10px"><button class="btn" id="vers-pre">Le sortir au pré</button><button class="btn" id="le-monter">Le monter</button></div>`);
@@ -4645,7 +4652,7 @@ function interactionProche() {
   let best = null, bd = Infinity;
   if (etat.conduite) return { texte: () => 'Sortir de la voiture', action: sortirVoiture };
   for (const it of interactions) { if (it.si && !it.si()) continue; const d = Math.hypot(J.x - it.x, J.z - it.z); if (d < it.r && d < bd) { bd = d; best = it; } }
-  for (const [k, m] of Object.entries(MARCHANDS)) { const d = Math.hypot(J.x - m.x, J.z - m.z); if (d < 3.5 && d < bd) { bd = d; best = { texte: () => `${m.nom} · ${m.metier}`, action: () => k === 'lucien' ? sellier() : etalMarche(k) }; } }
+  for (const [k, m] of Object.entries(MARCHANDS)) { const d = Math.hypot(J.x - m.x, J.z - m.z); if (d < 4.5 && d < bd) { bd = d; best = { texte: () => `${m.nom} · ${m.metier}`, action: () => k === 'lucien' ? sellier() : etalMarche(k) }; } }
   if (VOIT && etat.aPied) {
     const dv = Math.hypot(J.x - VOIT.x, J.z - VOIT.z);
     if (dv < 3.4 && dv < bd && !mene) { bd = dv; best = { texte: () => 'Conduire la voiture', action: entrerVoiture }; }
@@ -4694,7 +4701,13 @@ function interactionProche() {
   }
   return best;
 }
-function interagir() { if (ouvert()) return; const it = interactionProche(); if (it) it.action(); }
+function interagir() {
+  if (ouvert()) return;
+  const it = interactionProche();
+  if (it) it.action();
+  else if (!etat.aPied) { const c = etat.chevaux.find(h => h.id === etat.actif); if (c) soigner(c); } // rien autour : soigner son cheval
+  else toast('Approche-toi de quelqu’un ou d’un cheval : le cadre « E » s’affiche en bas');
+}
 
 // ------------------------------------------------------------------ Aide
 function aide() {
@@ -4809,6 +4822,7 @@ addEventListener('keydown', e => {
   if (ouvert()) {
     if (e.code === 'Escape') { fermer(); return; }
     if (!e.repeat && e.key?.toLowerCase() === 'm' && !mini && !modeBatir && !vueAtelier) { toucheMonter(); return; }
+    if (!e.repeat && e.key?.toLowerCase() === 'e' && !mini && !modeBatir && !vueAtelier) { fermer(); return; } // E ouvre, E referme
     touches[e.code] = true;
     if (mini && !e.repeat) { mini.touche(e.code); if (e.code === 'Space') e.preventDefault(); }
     return;
@@ -4840,6 +4854,7 @@ $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
 $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[data-ordre]'); if (b) { e.preventDefault(); ordonner(b.dataset.ordre); } });
 $('#b-aide').onclick = aide;
+$('#invite').onclick = e => { e.preventDefault(); interagir(); }; // toucher le cadre « E » = appuyer sur E
 $('#b-appel-cours').onclick = e => { e.currentTarget.blur(); appelCours(); };
 // le bouton « Cours » : appeler les enfants d'où que l'on soit (au lieu d'aller les chercher au banc)
 function appelCours() {
