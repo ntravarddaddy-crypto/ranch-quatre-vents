@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 13:36";</script>
+<script>window.VERSION_JEU = "2026-11-01 13:48";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -394,7 +394,11 @@ const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; //
 // de x = -36 à -32.5, ouverte aux deux bouts ; 5 box à l'ouest (15 à 19), 5 à l'est (20 à 24)
 const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
 const VENTE = { x: 80, z: 47 };                                   // ring des ventes aux enchères (2026-11-01), tribune au nord
-const CANTINE = { x: 54, z: 39 };                                 // cantine (2026-11-01) : préau à l'est du gîte, comptoir côté est                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
+const CANTINE = { x: 54, z: 39 };
+// dortoirs (2026-11-01) : un bâtiment creux au sud de la cantine, filles à l'ouest, garçons à l'est (mur au milieu, x = 48),
+// une porte chacun côté nord, 5 lits et 2 douches par dortoir
+const DORT = { x1: 40, x2: 56, z1: 50, z2: 59, mid: 48 };
+const salleDort = genre => genre === 'f' ? { x1: DORT.x1, x2: DORT.mid, porte: 43.5, sens: 1, nom: 'Dortoir des filles' } : { x1: DORT.mid, x2: DORT.x2, porte: 52.5, sens: -1, nom: 'Dortoir des garçons' };                                 // cantine (2026-11-01) : préau à l'est du gîte, comptoir côté est                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
 const PORTE_GITE = { x: GITE.x - GITE.hx - 1.3, z: GITE.z };
 const PRE_ENFANTS = { x1: 24, x2: 40, z1: -46, z2: -24, porte: { x: 30 } }; // pré des chevaux des stagiaires, à côté de leurs box, barrière au sud
 const REPRO = { x1: -62, x2: -44, z1: -8, z2: 8 };                       // paddock de reproduction
@@ -1613,6 +1617,82 @@ function asseoirAcheteur(a, assis) {
   if (h.humain) h.g.position.set(pl.x, assis ? pl.siege - h.H.hanchesAssis.y + 0.02 : pl.siege - 0.08, pl.z);
   else { h.g.position.set(pl.x, assis ? pl.siege - 0.95 : pl.siege - 0.08, pl.z); h.jambes.forEach(j => { j.rotation.x = assis ? -1.4 : 0; }); }
 }
+// lits et douches des dortoirs ; un enfant couché se voit dans son lit (couverture bombée, oreiller, tête et cheveux)
+const lits = { f: [], m: [] }, douches = { f: [], m: [] };
+{
+  const D = DORT, g = new THREE.Group(), haut = new THREE.Group(); scene.add(g); scene.add(haut);
+  const H = 3, mur = new THREE.MeshStandardMaterial({ map: repete(TEX.murs, 4, 1.2), roughness: 0.85 }), blanc = robeMat(0xf3eee4, 0.6);
+  const carreaux = new THREE.MeshStandardMaterial({ roughness: 0.25, map: peindre(128, (c, T) => { fond(c, T, '#9aa6ad'); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { c.fillStyle = (i + j) % 2 ? '#e6f1f6' : '#cfe3ee'; c.fillRect(i * T / 4 + 2, j * T / 4 + 2, T / 4 - 4, T / 4 - 4); } }) });
+  const segMur = (a, b, c2, d) => segs.push({ x1: a, z1: b, x2: c2, z2: d, h: 9, tag: 'mur' });
+  // murs : nord percé de deux portes, sud, ouest, est, et le mur du milieu
+  // le mur nord (celui des portes) est rangé avec le toit : dedans, il s'efface aussi, et l'on voit toute la pièce
+  for (const [a, b] of [[D.x1, 42.6], [44.4, 51.6], [53.4, D.x2]]) { bloc(b - a, H, 0.22, mur, (a + b) / 2, H / 2, D.z1, haut); segMur(a, D.z1, b, D.z1); }
+  // portes de 1,8 m, calées sur la grille des itinéraires (cases de 1 m, murs épaissis de 0,3) : à 1,4 m, aucune case ne restait libre et les enfants coupaient à travers le mur
+  for (const x of [43.5, 52.5]) { bloc(1.8, H - 2.2, 0.22, mur, x, 2.2 + (H - 2.2) / 2, D.z1, haut); for (const s of [-1, 1]) bloc(0.12, 2.2, 0.28, blanc, x + s * 0.9, 1.1, D.z1, haut); segs.push({ x1: x - 0.9, z1: D.z1, x2: x + 0.9, z2: D.z1, h: 9, tag: 'mur', pieton: true }); }
+  bloc(D.x2 - D.x1, H, 0.22, mur, (D.x1 + D.x2) / 2, H / 2, D.z2, g); segMur(D.x1, D.z2, D.x2, D.z2);
+  for (const x of [D.x1, D.x2, D.mid]) { bloc(0.22, H, D.z2 - D.z1, x === D.mid ? robeMat(0xe9dcc6, 0.8) : mur, x, H / 2, (D.z1 + D.z2) / 2, g); segMur(x, D.z1, x, D.z2); }
+  for (const x of [D.x1 + 2, D.x2 - 2, 46, 50]) { bloc(1.1, 0.8, 0.06, robeMat(0x24313a, 0.2), x, 1.9, D.z2 + 0.13, g); bloc(1.3, 0.1, 0.1, blanc, x, 1.45, D.z2 + 0.15, g); }
+  const sol = new THREE.Mesh(new THREE.PlaneGeometry(D.x2 - D.x1, D.z2 - D.z1), new THREE.MeshStandardMaterial({ map: repete(TEX.bois, 8, 4), color: 0xe0c9a6, roughness: 0.9 }));
+  sol.rotation.x = -Math.PI / 2; sol.position.set((D.x1 + D.x2) / 2, 0.03, (D.z1 + D.z2) / 2); sol.receiveShadow = true; g.add(sol);
+  for (const genre of ['f', 'm']) {
+    const S = salleDort(genre), drap = robeMat(genre === 'f' ? 0xe77fb3 : 0x5dade2, 0.85), tapis = robeMat(genre === 'f' ? 0xb06ad9 : 0x2f6fb5, 0.95);
+    bloc(3, 0.02, 2, tapis, (S.x1 + S.x2) / 2, 0.045, 54.5, g);
+    for (let i = 0; i < 5; i++) { // lits : tête au mur sud
+      const x = S.x1 + 0.95 + i * 1.53, z = 57.5;
+      bloc(0.95, 0.35, 2, MAT.bois, x, 0.3, z, g); bloc(0.95, 0.9, 0.08, MAT.bois, x, 0.45, z + 1.0, g);
+      bloc(0.88, 0.14, 1.9, robeMat(0xf6f3ec, 0.9), x, 0.54, z, g); bloc(0.9, 0.06, 1.3, drap, x, 0.63, z - 0.3, g);
+      ovo(0.3, 0.08, 0.17, robeMat(0xffffff, 0.9), x, 0.66, z + 0.7, g);
+      bloc(0.45, 0.5, 0.4, MAT.peint, x + 0.72, 0.25, z + 0.75, g); // table de nuit
+      meubles.push({ x, z: z - 0.5, r: 0.48 }, { x, z: z + 0.5, r: 0.48 });
+      const dor = new THREE.Group(); dor.position.set(x, 0, z); dor.visible = false; scene.add(dor);
+      bloc(0.85, 0.22, 1.4, drap, 0, 0.72, -0.25, dor); dor.userData.tete = ovo(0.11, 0.12, 0.12, robeMat(0xf0c8a8, 0.7), 0, 0.76, 0.55, dor);
+      dor.userData.cheveux = ovo(0.12, 0.09, 0.12, robeMat(0x6b4426, 0.9), 0, 0.82, 0.6, dor);
+      lits[genre].push({ x, z, pied: { x, z: z - 1.6 }, dormeur: dor });
+    }
+    // deux douches carrelées contre le mur du côté (ouest pour les filles, est pour les garçons)
+    const xm = genre === 'f' ? S.x1 : S.x2, s = S.sens;
+    for (let k = 0; k < 2; k++) {
+      const zc = 51.4 + k * 1.45, xc = xm + s * 0.7;
+      bloc(0.06, 2.2, 1.4, carreaux, xm + s * 0.04, 1.1, zc, g);
+      for (const dz of [-0.7, 0.7]) bloc(1.4, 2.2, 0.06, carreaux, xc, 1.1, zc + dz, g);
+      bloc(1.3, 0.06, 1.3, robeMat(0xf6f3ec, 0.3), xc, 0.05, zc, g);
+      maille(cylGeo(0.02, 0.02, 0.6, 6), robeMat(0xb8c0c6, 0.2), xm + s * 0.12, 1.95, zc, g);
+      const pomme = maille(cylGeo(0.09, 0.06, 0.05, 12), robeMat(0xb8c0c6, 0.2), xm + s * 0.3, 2.2, zc, g);
+      const rideau = bloc(0.04, 1.8, 1.3, robeMat(genre === 'f' ? 0xff9ec4 : 0x9fd4f0, 0.8), xm + s * 1.38, 1.2, zc, g); rideau.scale.z = 0.45; rideau.position.z = zc - 0.4;
+      const eau = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.35, 2.1, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xbfe7ff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+      eau.position.set(xc - s * 0.1, 1.1, zc); eau.visible = false; scene.add(eau);
+      douches[genre].push({ x: xc, z: zc, devant: { x: xm + s * 1.9, z: zc }, rot: s > 0 ? Math.PI / 2 : -Math.PI / 2, eau, libre: true });
+    }
+    bloc(1.6, 0.45, 0.4, MAT.bois, S.x2 - (genre === 'f' ? 1.4 : 6.6), 0.23, 50.5, g); // banc près de la porte
+    const lab = etiquette(S.nom, '#2f1f13', genre === 'f' ? '#ffd1e6' : '#cfe8ff', 0.6); lab.position.set(S.porte, 3.4, D.z1 - 0.3); scene.add(lab);
+  }
+  // toit à deux pans (faîte est-ouest) qui s'efface quand on est dedans
+  for (const sg of [1, -1]) { const pan = bloc(D.x2 - D.x1 + 0.8, 0.14, (D.z2 - D.z1) / 2 + 0.9, MAT.toit, (D.x1 + D.x2) / 2, H + 0.9, (D.z1 + D.z2) / 2 + sg * (D.z2 - D.z1) / 4, haut); pan.rotation.x = sg * 0.38; }
+  const tri = new THREE.Shape([new THREE.Vector2(-(D.z2 - D.z1) / 2, 0), new THREE.Vector2((D.z2 - D.z1) / 2, 0), new THREE.Vector2(0, 1.8)]);
+  for (const x of [D.x1, D.x2]) { const pg = new THREE.Mesh(new THREE.ShapeGeometry(tri), MAT.pignon); pg.rotation.y = Math.PI / 2; pg.position.set(x, H, (D.z1 + D.z2) / 2); haut.add(pg); }
+  fusionner(g); fusionner(haut);
+  toitsCoupes.push({ g: haut, x1: D.x1, x2: D.x2, z1: D.z1, z2: D.z2, porte: -1 });
+  lampe(44, 2.7, 55, false); lampe(52, 2.7, 55, false);
+}
+function litDe(e) { // les lits se donnent dans l'ordre des chambres, parmi les enfants du même genre
+  const memes = etat.stagiaires.filter(s => (s.genre === 'f') === (e.genre === 'f')).sort((a, b) => a.chambre - b.chambre);
+  return lits[e.genre === 'f' ? 'f' : 'm'][Math.max(0, memes.indexOf(e.s)) % 5];
+}
+function allerAuDortoir(e) { // le soir : une douche si une cabine est libre, puis au lit
+  const d = douches[e.genre === 'f' ? 'f' : 'm'].find(x => x.libre);
+  if (d) { d.libre = false; e.douche = d; aller(e, d.devant.x, d.devant.z, 'versDouche'); }
+  else { const l = litDe(e); aller(e, l.pied.x, l.pied.z, 'versLit'); }
+}
+function coucher(e) {
+  const l = litDe(e); e.etat = 'dort'; e.chemin = []; e.attente = 0; e.p.g.visible = false; e.x = l.pied.x; e.z = l.pied.z;
+  if (e.douche) { e.douche.libre = true; e.douche.eau.visible = false; e.douche = null; }
+  const c = l.dormeur; c.visible = true; c.userData.eleve = e;
+  c.userData.cheveux.material = robeMat(e.s.cheveux ?? e.s.look?.cheveux ?? (e.genre === 'f' ? 0xd8b26a : 0x6b4426), 0.9);
+}
+function lever(e) {
+  const l = litDe(e); if (l.dormeur.userData.eleve === e) l.dormeur.visible = false;
+  e.x = l.pied.x; e.z = l.pied.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z);
+}
 function construireCuisiniere() {
   if (cuisiniere) scene.remove(cuisiniere.g);
   cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
@@ -1697,6 +1777,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (x > DORT.x1 - 5 && x < DORT.x2 + 5 && z > DORT.z1 - 4 && z < DORT.z2 + 5) return false;
   if (Math.abs(x - VENTE.x) < 13 && Math.abs(z - VENTE.z) < 11) return false;
   if (Math.abs(x - CANTINE.x) < 9 && Math.abs(z - CANTINE.z) < 8) return false;
   if (x > GRANGE.x1 - 5 && x < GRANGE.x2 + 5 && z > GRANGE.z1 - 6 && z < GRANGE.z2 + 6) return false;
@@ -2780,6 +2861,8 @@ function majResidents() {
       const lab = etiquette(c.nom, '#fbf1dc', 'rgba(38,25,15,.75)', 0.55); lab.position.y = 2.7; m.g.add(lab);
       const pr = c.lieu === 'pre' ? prePar(c.pre) : null, dedans = q => q && q.x > pr.x1 + 1 && q.x < pr.x2 - 1 && q.z > pr.z1 + 1 && q.z < pr.z2 - 1;
       const p = pr ? (dedans(c.pos) ? c.pos : { x: rand(pr.x1 + 1.5, pr.x2 - 1.5), z: rand(pr.z1 + 1.5, pr.z2 - 1.5) }) : (c.pos || { x: J.x + 3, z: J.z });
+      const bat = !pr && toitsCoupes.find(t => p.x > t.x1 && p.x < t.x2 && p.z > t.z1 && p.z < t.z2); // un cheval en liberté laissé dans un bâtiment en ressort, devant la porte
+      if (bat) { p.x = (bat.x1 + bat.x2) / 2 + rand(-2, 2); p.z = bat.porte > 0 ? bat.z2 + 3 : bat.z1 - 3; }
       r = { cheval: c, m, x: p.x, z: p.z, rot: c.pos?.rot ?? rand(0, 6), vit: 0, cible: null, pause: rand(0, 4), ancre: { x: p.x, z: p.z }, sortie: 0 };
     }
     m.g.position.set(r.x, 0, r.z); m.g.rotation.y = r.rot; scene.add(m.g); return r;
@@ -3195,7 +3278,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -3819,7 +3902,7 @@ function construireNav() {
   const rect = (x1, z1, x2, z2) => { for (let x = Math.floor(x1); x < x2; x++) for (let z = Math.floor(z1); z < z2; z++) marque(x + 0.5, z + 0.5); };
   for (const r of BATIS.concat([ECURIE, MAISON, { x: (GRANGE.x1 + GRANGE.x2) / 2, z: (GRANGE.z1 + GRANGE.z2) / 2, hx: (GRANGE.x2 - GRANGE.x1) / 2, hz: (GRANGE.z2 - GRANGE.z1) / 2 }])) rect(r.x - r.hx - 0.4, r.z - r.hz - 0.4, r.x + r.hx + 0.4, r.z + r.hz + 0.4);
   for (const s of segs) {
-    if (s.tag === 'porteEnfants') continue;
+    if (s.tag === 'porteEnfants' || s.pieton) continue; // seuils de porte : les enfants passent
     const L = Math.hypot(s.x2 - s.x1, s.z2 - s.z1), n = Math.ceil(L / 0.25);
     for (let k = 0; k <= n; k++) { const x = s.x1 + (s.x2 - s.x1) * k / n, z = s.z1 + (s.z2 - s.z1) * k / n; for (const [dx, dz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) marque(x + dx, z + dz); }
   }
@@ -4614,7 +4697,7 @@ function departStagiaire(s) {
   const jours = Math.max(1, etat.jour - s.arrivee), gain = Math.round(20 * jours * (0.3 + s.humeur / 100));
   etat.pieces += gain; etat.stagiaires.splice(etat.stagiaires.indexOf(s), 1);
   const e = eleves.find(x => x.s === s);
-  if (e) { if (e.etat === 'gite') { e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; } e.attente = 0; aller(e, ARRIVEE.x, ARRIVEE.z, 'part'); }
+  if (e) { if (e.etat === 'gite') { e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; } if (e.etat === 'dort') lever(e); if (e.douche) { e.douche.libre = true; e.douche.eau.visible = false; e.douche = null; } e.attente = 0; aller(e, ARRIVEE.x, ARRIVEE.z, 'part'); }
   delete etatsStage[s.nom];
   construireChevauxStage(); sonPiece(); sauver();
   toast(`${s.nom} repart après ${jours} jour${jours > 1 ? 's' : ''}, ${humeurTexte(s.humeur, s.genre)} : +${gain} pièces`, 'or');
@@ -4652,15 +4735,15 @@ function matin(e) { // sortir le cheval du box et le mener au pré des enfants, 
   if (h && !h.vide && h.st.etat === 'box') { const d = devantBox(e.s.box); aller(e, d.x, d.z, 'versBox'); }
   else aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc');
 }
-function soir(e) { // ramener le cheval du pré à son box, puis aller au gîte
+function soir(e) { // ramener le cheval du pré à son box, puis la douche et le lit au dortoir
   const h = chevalDe(e.s);
   if (h && !h.vide && h.st.etat === 'pre') aller(e, pePorteDehors.x, pePorteDehors.z, 'cherchePre');
-  else aller(e, PORTE_GITE.x, PORTE_GITE.z, 'versGite');
+  else allerAuDortoir(e);
 }
 function arriveeEleve(e, jour) {
   const h = chevalDe(e.s), st = h?.st;
   switch (e.etat) {
-    case 'arrive': if (jour) matin(e); else { e.etat = 'gite'; e.p.g.visible = false; } break;
+    case 'arrive': if (jour) matin(e); else allerAuDortoir(e); break;
     case 'versBox': ouvrirPorteBox(e.s.box); e.attente = 0.9; e.etat = 'sortCheval'; break;
     case 'sortCheval': {
       if (st) { const d = BOX_PORTE(e.s.box); Object.assign(st, { etat: 'mene', x: d.x, z: d.z, rot: e.s.box < BOXES.n ? 0 : Math.PI, vit: 0 }); h.vb = null; }
@@ -4684,8 +4767,10 @@ function arriveeEleve(e, jour) {
       break;
     case 'ramene': { const d = devantBox(e.s.box); aller(e, d.x, d.z, 'rentreBox'); break; }
     case 'rentreBox': ouvrirPorteBox(e.s.box); if (st) st.etat = 'box'; if (h) h.vb = null; e.attente = 0.9; e.etat = 'ferme'; break;
-    case 'ferme': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else aller(e, PORTE_GITE.x, PORTE_GITE.z, 'versGite'); break;
-    case 'versGite': e.etat = 'gite'; e.p.g.visible = false; break;
+    case 'ferme': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else allerAuDortoir(e); break;
+    case 'versGite': allerAuDortoir(e); break;
+    case 'versDouche': if (e.douche) { e.etat = 'douche'; e.tDouche = 4; e.x = e.douche.x; e.z = e.douche.z; e.p.g.position.set(e.x, 0, e.z); e.p.g.rotation.y = e.douche.rot; e.douche.eau.visible = true; } else allerAuDortoir(e); break;
+    case 'versLit': coucher(e); break;
     case 'revient': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); break;
     case 'part': scene.remove(e.p.g); eleves.splice(eleves.indexOf(e), 1); break;
     case 'versCantine': servir(e); break;
@@ -4708,6 +4793,8 @@ function majEleves(dt) {
   for (const e of [...eleves]) {
     if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours') continue;
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
+    if (e.etat === 'dort') { if (!jour) continue; lever(e); matin(e); } // le matin, il se lève et sort du dortoir
+    if (e.etat === 'douche') { marcher(e.p, 0, dt); if ((e.tDouche -= dt) <= 0) { const d = e.douche; d.eau.visible = false; d.libre = true; e.douche = null; e.x = d.devant.x; e.z = d.devant.z; e.p.g.position.set(e.x, 0, e.z); const l = litDe(e); aller(e, l.pied.x, l.pied.z, 'versLit'); } continue; }
     if (!jour && e.etat === 'attend') soir(e);
     if (e.etat === 'demande') { if (!jour) { finirDemande(e, null); soir(e); } else majDemande(e, dt); continue; }
     if (e.etat === 'copain') { if (!jour) { e.meneur = null; soir(e); } else majCopain(e, dt); continue; }
@@ -4792,7 +4879,7 @@ function dormir() {
   if (etat.heure >= 18) { etat.jour++; nouveauJour(); }
   etat.heure = 7; fermer();
   for (const c of etat.chevaux) if (c.lieu === 'box') { c.faim = Math.max(c.faim ?? 80, 70); c.soif = Math.max(c.soif ?? 80, 70); }
-  for (const e of eleves) if (!['part', 'lecon', 'balade', 'concours'].includes(e.etat)) { e.etat = 'gite'; e.chemin = []; e.attente = 0; e.p.g.visible = false; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; }
+  for (const e of eleves) if (!['part', 'lecon', 'balade', 'concours'].includes(e.etat)) { if (e.etat === 'dort') lever(e); coucher(e); } // dormir : tout le monde au lit, réveil au dortoir
   for (const s of etat.stagiaires) if (!occupe(s)) { const b = BOX_POS(s.box); etatsStage[s.nom] = { etat: 'box', x: b.x, z: b.z, rot: BOX_ROT(s.box), vit: 0 }; }
   construireChevauxStage();
   toast(`Bonne nuit... Jour ${etat.jour}, 7 h du matin. Les chevaux au box ont eu leur ration`, 'or'); sauver();
@@ -4935,7 +5022,7 @@ function promenerEnfant(e, versCheval = false) {
 // un copain ou une copine qui suit, sur la trace exacte de l'enfant (donc jamais à travers un mur), 1,2 m derrière
 function majCopain(c, dt) {
   const m = c.meneur;
-  if (!m || m.etat !== 'promene' || m.copain !== c) { c.meneur = null; aller(c, ATTENTE[c.place].x, ATTENTE[c.place].z, enfantsDebout() ? 'versBanc' : 'versGite'); return; }
+  if (!m || m.etat !== 'promene' || m.copain !== c) { c.meneur = null; if (enfantsDebout()) aller(c, ATTENTE[c.place].x, ATTENTE[c.place].z, 'versBanc'); else soir(c); return; }
   const p = pointDerriere(m.trace || [], m.x, m.z, 1.2), dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
   const v = Math.min(3.2, d / Math.max(dt, 1e-3));
   if (d > 0.05) { c.x += dx / d * Math.min(d, v * dt); c.z += dz / d * Math.min(d, v * dt); c.p.g.rotation.y = Math.atan2(m.x - c.x, m.z - c.z); }
@@ -5419,7 +5506,7 @@ function remettreStagiaires() { // au chargement d'une partie
   for (const s of etat.stagiaires) {
     const p = ATTENTE[s.chambre], b = BOX_POS(s.box);
     etatsStage[s.nom] = jour ? { etat: 'pre', x: rand(P.x1 + 3, P.x2 - 3), z: rand(P.z1 + 3, P.z2 - 3), rot: rand(0, 6), vit: 0 } : { etat: 'box', x: b.x, z: b.z, rot: BOX_ROT(s.box), vit: 0 };
-    creerEleve(s, jour ? p.x : PORTE_GITE.x, jour ? p.z : PORTE_GITE.z, jour ? 'attend' : 'gite').p.g.rotation.y = Math.PI;
+    const e = creerEleve(s, jour ? p.x : PORTE_GITE.x, jour ? p.z : PORTE_GITE.z, jour ? 'attend' : 'gite'); e.p.g.rotation.y = Math.PI; if (!jour) coucher(e);
   }
   construireChevauxStage(); vitresOccupees();
 }
@@ -6337,7 +6424,7 @@ function dessinerCarte() {
   mx.fillStyle = '#9a6b3a'; for (const r of residents) if (!r.box) { mx.beginPath(); mx.arc(X(r.x), Z(r.z), 2.5, 0, 7); mx.fill(); }
   mx.fillStyle = '#e6d6ae'; mx.fillRect(X(MANEGE_C.x1), Z(MANEGE_C.z1), (MANEGE_C.x2 - MANEGE_C.x1) * s, (MANEGE_C.z2 - MANEGE_C.z1) * s);
   mx.fillStyle = '#7fb85f'; mx.fillRect(X(PRE_ENFANTS.x1), Z(PRE_ENFANTS.z1), (PRE_ENFANTS.x2 - PRE_ENFANTS.x1) * s, (PRE_ENFANTS.z2 - PRE_ENFANTS.z1) * s);
-  mx.fillStyle = '#b04a32'; for (const b of BATIS.concat([ECURIE, MAISON, { x: (GRANGE.x1 + GRANGE.x2) / 2, z: (GRANGE.z1 + GRANGE.z2) / 2, hx: (GRANGE.x2 - GRANGE.x1) / 2, hz: (GRANGE.z2 - GRANGE.z1) / 2 }])) mx.fillRect(X(b.x - b.hx), Z(b.z - b.hz), b.hx * 2 * s, b.hz * 2 * s);
+  mx.fillStyle = '#b04a32'; for (const b of BATIS.concat([{ x: (DORT.x1 + DORT.x2) / 2, z: (DORT.z1 + DORT.z2) / 2, hx: (DORT.x2 - DORT.x1) / 2, hz: (DORT.z2 - DORT.z1) / 2 }, ECURIE, MAISON, { x: (GRANGE.x1 + GRANGE.x2) / 2, z: (GRANGE.z1 + GRANGE.z2) / 2, hx: (GRANGE.x2 - GRANGE.x1) / 2, hz: (GRANGE.z2 - GRANGE.z1) / 2 }])) mx.fillRect(X(b.x - b.hx), Z(b.z - b.hz), b.hx * 2 * s, b.hz * 2 * s);
   mx.strokeStyle = '#6c6e70'; mx.lineWidth = 3; for (const t of ROUTE) { mx.beginPath(); for (const [x, z] of t) mx.lineTo(X(x), Z(z)); mx.stroke(); }
   mx.fillStyle = '#b5aa98'; mx.fillRect(X(MARCHE.x1), Z(MARCHE.z1), (MARCHE.x2 - MARCHE.x1) * s, (MARCHE.z2 - MARCHE.z1) * s);
   mx.fillStyle = '#e6d6ae'; mx.fillRect(X(REGIONAL.x1), Z(REGIONAL.z1), (REGIONAL.x2 - REGIONAL.x1) * s, (REGIONAL.z2 - REGIONAL.z1) * s);
@@ -6388,7 +6475,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
