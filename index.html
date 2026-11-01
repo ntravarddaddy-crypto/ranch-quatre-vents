@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 14:01";</script>
+<script>window.VERSION_JEU = "2026-11-01 14:05";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -399,7 +399,7 @@ const CANTINE = { x: 54, z: 39 };
 // une porte chacun côté nord, 5 lits et 2 douches par dortoir
 const DORT = { x1: 40, x2: 56, z1: 50, z2: 59, mid: 48 };
 const salleDort = genre => genre === 'f' ? { x1: DORT.x1, x2: DORT.mid, porte: 43.5, sens: 1, nom: 'Dortoir des filles' } : { x1: DORT.mid, x2: DORT.x2, porte: 52.5, sens: -1, nom: 'Dortoir des garçons' };                                 // cantine (2026-11-01) : préau à l'est du gîte, comptoir côté est                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
-const PORTE_GITE = { x: GITE.x - GITE.hx - 1.3, z: GITE.z };
+const PORTE_GITE = { x: 48, z: 47.5 }; // depuis le retrait du gîte (2026-11-01) : devant les dortoirs, entre leurs deux portes
 const PRE_ENFANTS = { x1: 24, x2: 40, z1: -46, z2: -24, porte: { x: 30 } }; // pré des chevaux des stagiaires, à côté de leurs box, barrière au sud
 const REPRO = { x1: -62, x2: -44, z1: -8, z2: 8 };                       // paddock de reproduction
 const ELEVAGE = { x1: -66, x2: -46, z1: 14, z2: 32 };                     // nurserie : poulains et leurs mères (2026-10-12)
@@ -425,7 +425,7 @@ const SEGS_SENTIER = SENTIER.map(([x1, z1], i) => { const [x2, z2] = SENTIER[(i 
 const BORNES = [1, 3, 5, 6, 7, 9, 10, 12].map(i => ({ x: SENTIER[i][0], z: SENTIER[i][1] }));
 // bâtiments pleins (collisions rectangulaires)
 const BATIS = [{ x: BOXES.x1 + BOXES.n * BOXES.l / 2, z: BOXES.z - BOXES.prof / 2, hx: BOXES.n * BOXES.l / 2, hz: BOXES.prof / 2 },
-  { x: BOXES2.x1 + BOXES2.n * BOXES2.l / 2, z: BOXES2.z + BOXES2.prof / 2, hx: BOXES2.n * BOXES2.l / 2, hz: BOXES2.prof / 2 }, GITE,
+  { x: BOXES2.x1 + BOXES2.n * BOXES2.l / 2, z: BOXES2.z + BOXES2.prof / 2, hx: BOXES2.n * BOXES2.l / 2, hz: BOXES2.prof / 2 },
   { x: 70, z: 22.3, hx: 15.2, hz: 2.2 }, { x: 104.5, z: 0, hx: 1.6, hz: 1.6 },
   { x: 134, z: -131, hx: 2.2, hz: 15 }];  // tribune du concours régional
 const P_MARGAUX = { x: 5, z: 3 }, P_BASILE = { x: -7, z: 7 }, P_INES = { x: 4, z: 55 };
@@ -1189,56 +1189,8 @@ for (let i = 0; i < 2 * GRANGE.n; i++) plaquesBox.push(null);
   const tab = etiquette('Matériel', '#fbf1dc', 'rgba(47,94,58,.95)', 0.6); tab.position.set(TABLEAU.x, 2.3, TABLEAU.z); scene.add(tab);
 }
 
-// ------------------------------------------------------------------ Gîte des cavaliers, lampes, sentier de balade
-{
-  // maison à étage : rez-de-chaussée (salle commune), cinq chambres à l'étage, une fenêtre chacune côté façade et côté jardin
-  const g = new THREE.Group(); g.position.set(GITE.x, 0, GITE.z); scene.add(g);
-  const W = GITE.hx * 2, D = GITE.hz * 2, H = 6.2;
-  const enduit = new THREE.MeshStandardMaterial({ color: 0xeee2c8, roughness: 0.9 });
-  const enduitDouble = new THREE.MeshStandardMaterial({ color: 0xeee2c8, roughness: 0.9, side: THREE.DoubleSide });
-  const pierre = new THREE.MeshStandardMaterial({ map: repete(TEX.ecorce, 4, 1), color: 0xb9b0a2, roughness: 1 });
-  const blanc = robeMat(0xf6f2ea, 0.6), volet = robeMat(0x4f7d5c, 0.7), jardiniere = robeMat(0x6a4426, 0.8);
-  bloc(W + 0.3, 0.45, D + 0.3, pierre, 0, 0.22, 0, g);
-  bloc(W, H, D, enduit, 0, H / 2, 0, g);
-  bloc(W + 0.12, 0.18, D + 0.12, blanc, 0, 3.15, 0, g);
-  for (const [x, z] of [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]]) bloc(0.3, H, 0.3, pierre, x, H / 2, z, g);
-  // toit à deux pans, faîte dans la longueur ; pignons triangulaires
-  const pente = Math.atan2(3, W / 2 + 0.5), tri = new THREE.Shape([new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(0, 3)]);
-  for (const s of [1, -1]) {
-    const pan = bloc(Math.hypot(W / 2 + 0.6, 3) + 0.2, 0.18, D + 0.9, MAT.toit, s * (W / 4 + 0.15), H + 1.5, 0, g); pan.rotation.z = -s * pente;
-    const p = new THREE.Mesh(new THREE.ShapeGeometry(tri), enduitDouble); p.position.set(0, H, s * D / 2); p.castShadow = true; g.add(p);
-  }
-  bloc(0.3, 0.3, D + 1, robeMat(0x2e2724, 0.8), 0, H + 3.05, 0, g);
-  bloc(0.9, 2.4, 0.9, pierre, W / 4, H + 2.6, -D / 4, g);
-  // fenêtres : cadre blanc, vitre, volets ouverts ; celles des chambres s'allument le soir quand la chambre est occupée
-  const vitreNeutre = new THREE.MeshStandardMaterial({ color: 0x2c3a46, roughness: 0.15, metalness: 0.3, emissive: 0xffc070, emissiveIntensity: 0 });
-  const fenetre = (x, y, z, face, vitre) => { // face : +1 ou -1 selon le côté (axe x)
-    bloc(0.08, 1.38, 1.12, blanc, x + face * 0.03, y, z, g, false);
-    bloc(0.06, 1.2, 0.95, vitre, x + face * 0.07, y, z, g, false);
-    bloc(0.06, 0.06, 0.95, blanc, x + face * 0.09, y + 0.15, z, g, false);
-    for (const s of [-1, 1]) bloc(0.06, 1.3, 0.52, volet, x + face * 0.05, y, z + s * 0.84, g, false);
-  };
-  for (let i = 0; i < 5; i++) {
-    const z = -D / 2 + 1.4 + i * (D - 2.8) / 4, v = new THREE.MeshStandardMaterial({ color: 0x2c3a46, roughness: 0.15, metalness: 0.3, emissive: 0xffc070, emissiveIntensity: 0 });
-    v.userData.occupee = false; vitresGite.push(v);
-    fenetre(-W / 2, 4.6, z, -1, v); fenetre(W / 2, 4.6, z, 1, v);
-    bloc(0.3, 0.22, 1.0, jardiniere, -W / 2 - 0.2, 3.85, z, g);
-    for (let k = 0; k < 4; k++) ovo(0.1, 0.09, 0.1, robeMat(pick([0xe8505b, 0xf7e14b, 0xf59ac0, 0xffffff]), 0.6), -W / 2 - 0.22, 4.02, z - 0.36 + k * 0.24, g);
-    const num = etiquette(`${i + 1}`, '#2f1f13', '#f6f3ec', 0.32); num.position.set(-W / 2 - 0.12, 5.45, z); g.add(num);
-  }
-  for (const z of [-4.8, -2.4, 2.4, 4.8]) { fenetre(-W / 2, 1.65, z, -1, vitreNeutre); fenetre(W / 2, 1.65, z, 1, vitreNeutre); }
-  // porte d'entrée, auvent, marches
-  bloc(0.12, 2.3, 1.3, MAT.portes, -W / 2 - 0.04, 1.6, 0, g);
-  bloc(0.1, 0.12, 1.5, blanc, -W / 2 - 0.08, 2.8, 0, g);
-  bloc(1.3, 0.2, 1.8, pierre, -W / 2 - 0.65, 0.1, 0, g); bloc(0.7, 0.4, 1.8, pierre, -W / 2 - 0.35, 0.2, 0, g);
-  const auvent = bloc(1.8, 0.12, 2.6, MAT.toit, -W / 2 - 0.85, 3.0, 0, g); auvent.rotation.z = 0.25;
-  for (const s of [-1, 1]) maille(cylGeo(0.06, 0.07, 2.9, 8), MAT.bois, -W / 2 - 1.6, 1.45, s * 1.1, g);
-  const enseigne = etiquette('Gîte des cavaliers', '#2f1f13', '#f3eee4', 0.9); enseigne.position.set(-W / 2 - 2.2, 3.4, 0); g.add(enseigne);
-  fusionner(g);
-  // petite allée jusqu'au chemin
-  const allee = new THREE.Mesh(new THREE.PlaneGeometry(GITE.x - GITE.hx - 30, 2.4), new THREE.MeshStandardMaterial({ map: repete(TEX.terre, 1.5, 0.7), roughness: 1 }));
-  allee.rotation.x = -Math.PI / 2; allee.position.set((30 + GITE.x - GITE.hx) / 2, 0.016, GITE.z); allee.receiveShadow = true; scene.add(allee);
-}
+// ------------------------------------------------------------------ Lampes, sentier de balade
+// (le gîte des cavaliers a été retiré le 2026-11-01, à la demande de Léa : les enfants dorment aux dortoirs)
 {
   // Ta maison : on y entre. Rez-de-chaussée en pierres de taille, aux murs creux, porte au nord ; dedans, cuisine, table,
   // cheminée, canapé, lit, bibliothèque, escalier. L'étage à colombages et le toit (groupe « haut ») s'effacent quand tu es dedans.
@@ -3299,7 +3251,6 @@ const ZONES_INTERDITES = [
   [LAC.x - LAC.r - 3, LAC.z - LAC.r - 3, LAC.x + LAC.r + 3, LAC.z + LAC.r + 3], [P_MARGAUX.x - 2, P_MARGAUX.z - 2, P_MARGAUX.x + 2, P_MARGAUX.z + 2],
   [P_BASILE.x - 2, P_BASILE.z - 2, P_BASILE.x + 2, P_BASILE.z + 2], [ATTENTE[0].x - 2, ATTENTE[0].z - 2, ATTENTE[4].x + 2, ATTENTE[0].z + 3],
   [BOXES2.x1 - 1, BOXES2.z - 3.5, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 1],
-  [GITE.x - GITE.hx - 3, GITE.z - GITE.hz - 1, GITE.x + GITE.hx + 1, GITE.z + GITE.hz + 1],
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
@@ -4717,7 +4668,7 @@ function arriveeStagiaire() {
   const s = { nom, genre, chambre, box: BOXES.n + chambre, arrivee: etat.jour, depart: etat.jour + STAGE_JOURS, humeur: 70, lecons: 0, balades: 0, dernier: etat.jour,
     cheval: chevalStagiaire(f.niveau), haut: pick(COULEURS_STAGE), cheveux: pick(CHEVEUX)[1], peau: pick(PEAUX)[1], bas: pick(BAS)[1], casque: pick(CASQUES)[1] };
   etat.stagiaires.push(s); aller(creerEleve(s, ARRIVEE.x, ARRIVEE.z, 'arrive'), PORTE_GITE.x, PORTE_GITE.z, 'arrive'); construireChevauxStage(); sauver();
-  toast(`${nom} arrive pour ${STAGE_JOURS} jours avec son cheval ${s.cheval.nom} : chambre ${chambre + 1} du gîte`, 'or');
+  toast(`${nom} arrive pour ${STAGE_JOURS} jours avec son cheval ${s.cheval.nom} : un lit au dortoir des ${s.genre === 'f' ? 'filles' : 'garçons'}`, 'or');
 }
 function departStagiaire(s) {
   const jours = Math.max(1, etat.jour - s.arrivee), gain = Math.round(20 * jours * (0.3 + s.humeur / 100));
@@ -4862,7 +4813,7 @@ function majTemps(dt) {
   etat.heure += dt / HEURE_S;
   if (avant < 7.5 && etat.heure >= 7.5 && etat.stagiaires.length) toast('Les enfants sortent leurs chevaux, puis vont à la cantine : sers-leur le petit-déjeuner (Cantine, K)', 'or');
   if (avant < 12 && etat.heure >= 12 && etat.stagiaires.length) toast('Midi : les enfants ont faim. Appelle-les à la cantine (bouton Cantine, ou touche K)', 'or');
-  if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont au gîte');
+  if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont se doucher et se coucher aux dortoirs');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
   if (etat.heure >= 24) { etat.heure -= 24; etat.jour++; nouveauJour(); }
   if (Math.floor(avant * 2) !== Math.floor(etat.heure * 2)) { // toutes les demi-heures du jeu
@@ -4935,11 +4886,11 @@ function panneauCantine() {
   if (ouvert()) fermer();
   const h = heureTexte(etat.heure), m = etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' };
   if (!etat.stagiaires.length) { ouvrir(`<div class="pnj">Josette · cantine · ${h}</div><h2>Personne à nourrir</h2><p>Les enfants en stage mangent ici. Il n’y en a aucun pour l’instant.</p>`); return; }
-  if (!enfantsDebout()) { ouvrir(`<div class="pnj">Josette · cantine · ${h}</div><h2>Les enfants sont au gîte</h2><p>Ils prennent leur petit-déjeuner et leur dîner au gîte. La cantine sert de 7 h à 18 h.</p>`); return; }
+  if (!enfantsDebout()) { ouvrir(`<div class="pnj">Josette · cantine · ${h}</div><h2>Les enfants sont aux dortoirs</h2><p>La cantine sert de 7 h à 18 h.</p>`); return; }
   const prix = PLATS[m.plat].prix + DESSERTS[m.dessert].prix, prets = eleves.filter(peutManger);
   const lignes = etat.stagiaires.map(s => {
     const e = eleves.find(x => x.s === s), g = goutsDe(s.nom), f = Math.round(s.faim ?? 100);
-    const ou = !e || !e.p.g.visible ? 'au gîte' : e.etat === 'attendDej' ? 'attend son petit-déjeuner' : e.etat === 'versDej' ? 'vient déjeuner' : e.etat === 'mange' ? 'à table' : e.etat === 'versCantine' ? 'arrive à la cantine' : peutManger(e) ? 'au banc, prêt' : 'occupé';
+    const ou = !e || !e.p.g.visible ? 'au dortoir' : e.etat === 'attendDej' ? 'attend son petit-déjeuner' : e.etat === 'versDej' ? 'vient déjeuner' : e.etat === 'mange' ? 'à table' : e.etat === 'versCantine' ? 'arrive à la cantine' : peutManger(e) ? 'au banc, prêt' : 'occupé';
     return `<div class="stat"><span>${s.nom} · ${ou}</span><div class="barre"><i style="width:${f}%;background:${f < 35 ? 'var(--rouge)' : f < 60 ? 'var(--or)' : 'var(--vert)'}"></i></div><b>${f}</b></div>
       <small style="display:block;margin:-2px 0 6px;opacity:.8">aime ${PLATS[g.aime].le} · n’aime pas ${PLATS[g.deteste].le}</small>`;
   }).join('');
@@ -5021,8 +4972,8 @@ const DEMANDES = [
     oui: (e, g, d) => { e.objectif = d.allure; return [6, 'Génial ! Tu me fais un cours ?', `Objectif du jour de ${e.nom} : ${OBJ_TEXTE[d.allure]}. Donne-lui un cours (touche C)`]; } },
   { id: 'cheval', texte: e => `Je peux aller faire un câlin à ${e.s.cheval?.nom || 'mon cheval'} et le brosser ?`,
     oui: e => { if (e.s.cheval?.stats) gagnerXp(e.s.cheval, 'lien', 6); e.tAct = HEURE_S * 0.5; promenerEnfant(e, true); return [7, 'Merci ! Il va être tout beau !', `${e.nom} va brosser son cheval`]; } },
-  { id: 'pause', si: () => etat.heure >= 13, texte: () => 'Je suis un peu fatigué… je peux faire une pause au gîte ?',
-    oui: e => { e.tAct = HEURE_S * 1; aller(e, PORTE_GITE.x, PORTE_GITE.z, 'versPause'); return [8, 'Merci, je reviens en forme !', `${e.nom} se repose une heure au gîte`]; } },
+  { id: 'pause', si: () => etat.heure >= 13, texte: () => 'Je suis un peu fatigué… je peux aller me reposer au dortoir ?',
+    oui: e => { e.tAct = HEURE_S * 1; aller(e, PORTE_GITE.x, PORTE_GITE.z, 'versPause'); return [8, 'Merci, je reviens en forme !', `${e.nom} se repose une heure au dortoir`]; } },
   { id: 'parents', texte: () => 'Je peux appeler mes parents pour leur raconter ma journée ?', oui: () => [6, 'Merci ! Ils vont être trop contents !', null] },
   { id: 'jeu', texte: () => 'On peut faire une partie de ballon tous ensemble ?', oui: () => { for (const s of etat.stagiaires) s.humeur = clamp(s.humeur + 4, 0, 100); return [6, 'Youpi ! Tout le monde joue !', 'Tous les enfants gagnent de la bonne humeur']; } },
   { id: 'photo', texte: () => 'Tu peux me prendre en photo avec mon cheval ? C’est pour ma maman !', oui: () => [7, 'Merci ! Elle est trop belle !', null] },
@@ -5037,7 +4988,7 @@ function lancerDemande() {
 }
 // coins du ranch où les enfants vont se promener (dans la grille des itinéraires, x -48 à 70, z -72 à 66)
 const LIEUX_BALADE = [['la nurserie des poulains', -44, 36], ['la grande écurie', -34.25, 7], ['le paddock de reproduction', -42, 10], ['le paddock', -24, 31],
-  ['la sellerie', -16, 3], ['ta maison', 20, 5], ['le manège couvert', 5, 41], ['le rond de longe', -45, 37], ['la cantine', 54, 46], ['le jardin du gîte', 48, 32],
+  ['la sellerie', -16, 3], ['ta maison', 20, 5], ['le manège couvert', 5, 41], ['le rond de longe', -45, 37], ['la cantine', 54, 46], ['les dortoirs', 48, 47],
   ['la carrière', 38, 6], ['le pré des stagiaires', 30, -21], ['l’écurie des box', 4, -24], ['le comptoir de Rose', 9, 22], ['le départ du sentier du lac', -12, -11]];
 function promenerEnfant(e, versCheval = false) {
   if (versCheval) { aller(e, PRE_ENFANTS.porte.x + rand(-3, 3), PRE_ENFANTS.z2 + 2.5, 'promene'); return; }
@@ -5090,15 +5041,15 @@ function panneauDemande(e) {
 function panneauGite() {
   const fiches = [...Array(CHAMBRES).keys()].map(i => {
     const s = etat.stagiaires.find(t => t.chambre === i);
-    if (!s) return `<article class="fiche"><h3>Chambre ${i + 1}</h3><small>Libre : un stagiaire peut arriver entre 9 h et 17 h</small></article>`;
+    if (!s) return `<article class="fiche"><h3>Place ${i + 1}</h3><small>Libre : un stagiaire peut arriver entre 9 h et 17 h</small></article>`;
     const f = ficheEleve(s.nom), jourN = Math.min(STAGE_JOURS, etat.jour - s.arrivee + 1), aujourdhui = s.dernier === etat.jour;
-    return `<article class="fiche"><h3>Chambre ${i + 1} · ${s.nom}</h3><small>${accord(s, 'Cavalière', 'Cavalier')} ${niveauDe(f.niveau)[s.genre]} · jour ${jourN} sur ${STAGE_JOURS}</small>
+    return `<article class="fiche"><h3>${s.nom} · dortoir des ${s.genre === 'f' ? 'filles' : 'garçons'}</h3><small>${accord(s, 'Cavalière', 'Cavalier')} ${niveauDe(f.niveau)[s.genre]} · jour ${jourN} sur ${STAGE_JOURS}</small>
       <small>Son cheval : <b>${s.cheval.nom}</b>, ${s.cheval.race}, box ${s.box + 1}</small>
       <div class="stat"><span>Humeur</span><div class="barre"><i style="width:${s.humeur}%;background:${s.humeur < 30 ? 'var(--rouge)' : s.humeur < 60 ? 'var(--or)' : 'var(--vert)'}"></i></div><b>${Math.round(s.humeur)}</b></div>
       <small>${s.lecons} cours, ${s.balades} balade${s.balades > 1 ? 's' : ''} · ${aujourdhui ? 'déjà monté aujourd’hui' : 'n’a pas encore monté aujourd’hui'}</small></article>`;
   }).join('');
   const nuit = etat.heure >= 18 || etat.heure < 6;
-  ouvrir(`<div class="pnj">Gîte des cavaliers · jour ${etat.jour}, ${heureTexte(etat.heure)}</div><h2>Cinq chambres à l’étage</h2>
+  ouvrir(`<div class="pnj">Dortoirs · jour ${etat.jour}, ${heureTexte(etat.heure)}</div><h2>Tes stagiaires (cinq places)</h2>
     <p>Les stagiaires restent ${STAGE_JOURS} jours avec leur propre cheval. Donne-leur un cours collectif au manège couvert ou une balade sur le sentier du lac au moins une fois par jour : sinon leur humeur baisse. En partant, ils paient leur séjour selon leur humeur.</p>
     <div class="grille">${fiches}</div>
     <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 18 h</small>'}</div>`);
@@ -5771,7 +5722,7 @@ const interactions = [
   { x: P_BASILE.x, z: P_BASILE.z, r: 5, texte: () => 'Voir les chevaux de Basile', action: boutique },
   { x: P_INES.x, z: P_INES.z, r: 6, texte: () => 'Dresser ton cheval avec Inès', action: dressage },
   { x: ECURIE.x, z: ECURIE.z - 2.3, r: 2.6, texte: () => 'Choisir la selle et le tapis', action: () => atelier('selle') },
-  { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.5, texte: () => 'Entrer au gîte des cavaliers', action: () => panneauGite() },
+  { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.2, texte: () => 'Dortoirs : tes stagiaires, et dormir', action: () => panneauGite() },
   { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 18 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 18 h)', action: () => dormir() },
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
   { x: VENTE.x + 4, z: VENTE.z + 7, r: 2.8, texte: () => 'Régler les obstacles de la piste des ventes', action: () => panneauObstaclesVente() },
@@ -5877,7 +5828,7 @@ function aide() {
       <li><b>Gîte des cavaliers</b>, au sud-est : cinq chambres. Chaque enfant reste <b>${STAGE_JOURS} jours</b> avec son propre cheval, logé dans les <b>box des stagiaires</b> (face à l’écurie). Chaque jour où il monte, il gagne un niveau le lendemain ; s’il ne monte pas, il boude. Les ${JOURS_CONCOURS} derniers jours, il court un <b>concours</b> sur le parcours de la carrière (classement, prix pour le ranch). En partant, il paie son séjour selon son humeur.</li>
       <li><b>Ta maison</b>, au sud du chemin, près du ranch : on y dort jusqu’au matin (après 18 h) et on y voit ses réserves. À côté, le <b>comptoir</b> de Rose achète et vend foin, avoine, carottes et pommes, à des prix qui changent chaque jour. <b>Basile</b> rachète aussi tes chevaux.</li>
       <li><b>Champs</b> : trace-les avec Aménager (B), puis sème-les (E) : foin, avoine ou carottes. Ils poussent en 16 à 30 heures de jeu ; récolte-les quand ils sont dorés. L’avoine rassasie les chevaux et leur donne de l’endurance.</li>
-      <li><b>Voiture et van</b>, garés devant le gîte : à pied, E près de la voiture pour conduire (Z, Q, D, Maj pour aller vite, E pour sortir). Mène un cheval en main jusqu’à l’arrière du van et appuie sur E pour le faire monter (deux au plus) ; E au même endroit pour le faire descendre.</li>
+      <li><b>Voiture et van</b>, garés au parking près de la route : à pied, E près de la voiture pour conduire (Z, Q, D, Maj pour aller vite, E pour sortir). Mène un cheval en main jusqu’à l’arrière du van et appuie sur E pour le faire monter (deux au plus) ; E au même endroit pour le faire descendre.</li>
       <li><b>La route</b> part du ranch vers l’est : au nord, le <b>concours régional</b> du Domaine des Tilleuls (inscription auprès du juge, trois catégories, cinq cavaliers d’autres ranchs, tu passes en dernier) ; au sud, le <b>marché du village</b> (grains, fruits et légumes, engrais, et Victor qui vend d’autres chevaux chaque jour).</li>
       <li><b>Concours ouvert</b> : à la cabane du juge, au bout de la carrière, invite les ranchs voisins à courir chez toi. Ils paient leur engagement ; tes enfants en jour de concours et toi pouvez courir avec eux.</li>
       <li><b>Box</b> : chaque box ouvre au fond sur un petit paddock ; les chevaux y sortent seuls dans la journée et rentrent le soir. Les portes de devant s’ouvrent quand on fait entrer ou sortir un cheval.</li>
@@ -5886,7 +5837,7 @@ function aide() {
       <li><b>Nurserie des poulains</b>, au nord du paddock de reproduction : le poulain y naît avec sa mère. Approche-toi de lui (E) pour lui donner le biberon, jouer, l’habituer au licol… Bien élevé, il gagne des niveaux en devenant adulte et se vend plus cher.</li>
       <li><b>Sellerie</b>, dans la grange : entre, tes selles sont sur leurs porte-selles et tes tapis sur les barres. Selles et tapis s’achètent au marché, chez Lucien le sellier.</li>
       <li><b>Ta maison</b> : entre par la porte. À table, tes réserves et tes comptes ; le soir, ton lit.</li>
-      <li><b>Jour et nuit</b> : une journée dure 10 minutes. La nuit, de 20 h 30 à 6 h 30, les lampes s’allument et les enfants dorment au gîte.</li>
+      <li><b>Jour et nuit</b> : une journée dure 10 minutes. La nuit, de 20 h 30 à 6 h 30, les lampes s’allument et les enfants dorment aux dortoirs (filles et garçons, avec douches).</li>
       <li><b>Sentier du lac</b>, au nord-ouest : une boucle balisée par ${BORNES.length} bornes. Passe-les toutes à cheval, seul (récompense une fois par jour) ou avec des stagiaires qui te suivent en file.</li>
       <li><b>À pied</b> (touche M) : approche un cheval et appuie sur E pour le nourrir, l’abreuver, le brosser ou le mener en main. Surveille sa faim et sa soif : sous 30 %, il se fatigue vite.</li>
       <li><b>Prés</b> : ferme bien la barrière (E), sinon tes chevaux s’échappent. Construis prés, abreuvoirs et râteliers avec Aménager (B).</li>
@@ -6011,10 +5962,10 @@ $('#b-cantine').onclick = e => { e.currentTarget.blur(); panneauCantine(); };
 function appelCours() {
   if (ouvert()) fermer();
   const h = heureTexte(etat.heure);
-  if (!etat.stagiaires.length) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Aucun enfant en stage</h2><p>Les enfants arrivent entre 9 h et 17 h, quand une chambre du gîte est libre.</p>`); return; }
+  if (!etat.stagiaires.length) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Aucun enfant en stage</h2><p>Les enfants arrivent entre 9 h et 17 h, quand il reste de la place (cinq enfants au plus).</p>`); return; }
   if (!heureDeCours()) {
     const nuit = etat.heure >= 18 || etat.heure < 6;
-    ouvrir(`<div class="pnj">Cours · jour ${etat.jour}, ${h}</div><h2>Les enfants ${etat.heure < 8 ? 'se préparent' : 'sont au gîte'}</h2>
+    ouvrir(`<div class="pnj">Cours · jour ${etat.jour}, ${h}</div><h2>Les enfants ${etat.heure < 8 ? 'se préparent' : 'sont aux dortoirs'}</h2>
       <p>Les cours se donnent de 8 h à 19 h. ${nuit ? 'Dors jusqu’au matin : les enfants sortiront avec leurs chevaux.' : 'Reviens à 8 h.'}</p>
       ${nuit ? '<div class="boutons"><button class="btn or gros" id="dormir-cours">Dormir jusqu’à 7 h</button></div>' : ''}`);
     const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
