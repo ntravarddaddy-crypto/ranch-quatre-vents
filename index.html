@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 13:48";</script>
+<script>window.VERSION_JEU = "2026-11-01 13:51";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -455,8 +455,15 @@ const CLE = 'ranch-quatre-vents-v1';
 function nouveauCheval(nom, race, robe, base, taille = 1) {
   const stats = {};
   for (const [k] of STATS) stats[k] = { niv: base[k] || 1, xp: 0 };
-  return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nom, race, robe, taille, stats, sexe: Math.random() < 0.5 ? 'jument' : 'etalon' };
+  return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nom, race, robe, taille, stats, sexe: Math.random() < 0.5 ? 'jument' : 'etalon',
+    age0: 4 + Math.floor(Math.random() * 8), jourAge0: typeof etat === 'object' && etat ? etat.jour : 1 };
 }
+// âge des chevaux (2026-11-01) : un jour de jeu compte pour un an. Poulain : depuis sa naissance ; les autres : leur
+// âge à l'arrivée (age0) plus les jours passés depuis (jourAge0). Longe à 2 ans, monté à 3 ans, saut à 4 ans.
+const AGE_LONGE = 2, AGE_SAUT = 4;
+const ageCheval = c => c.naissance != null ? Math.max(0, etat.jour - c.naissance) : (c.age0 ?? 6) + Math.max(0, etat.jour - (c.jourAge0 ?? etat.jour));
+const auPre = id => { const n = prePar(id)?.nom ?? 'pré'; return /^Nurserie/.test(n) ? 'à la nurserie des poulains' : `au ${n.charAt(0).toLowerCase() + n.slice(1)}`; };
+const ageTexte = c => { const a = ageCheval(c); return a < 1 ? 'moins d’un an' : `${a} an${a > 1 ? 's' : ''}`; };
 function etatNeuf() {
   const c = nouveauCheval('Caramel', 'Poney de selle', 'palomino', { vitesse: 2, saut: 2, endurance: 2, lien: 2 }, 0.94);
   return {
@@ -3167,8 +3174,8 @@ function lacher(r) {
   r.ancre = { x: r.x, z: r.z }; r.cible = null; r.pause = 2; sauver();
 }
 function aupresDuCheval(r) {
-  const c = r.cheval, lieu = c.lieu === 'pre' ? ` · au ${prePar(c.pre)?.nom ?? 'pré'}` : ' · en liberté';
-  ouvrir(`<div class="pnj">${c.race}${lieu}</div><h2>${c.nom}</h2>${besoinsHtml(c)}${blocStats(c.stats)}
+  const c = r.cheval, lieu = c.lieu === 'pre' ? ` · ${auPre(c.pre)}` : ' · en liberté';
+  ouvrir(`<div class="pnj">${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${lieu}</div><h2>${c.nom}</h2>${besoinsHtml(c)}${blocStats(c.stats)}
     <div class="boutons" style="margin-top:12px">
       <button class="btn or" data-a="monter">Monter <kbd>M</kbd></button>
       <button class="btn" data-a="foin">Donner du foin</button><button class="btn" data-a="eau">Donner à boire</button>
@@ -3177,9 +3184,9 @@ function aupresDuCheval(r) {
       <button class="btn" data-a="pomme" ${etat.pommes ? '' : 'disabled'}>Pomme (${etat.pommes})</button>
       <button class="btn" data-a="brosser">Brosser</button>
       <button class="btn" data-a="mener">${mene === r ? 'Lâcher ici' : 'Mener en main'}</button>
-      ${poulain(c) ? '' : `<button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>`}
+      ${ageCheval(c) < AGE_LONGE ? `<button class="btn" disabled>Longe : à ${AGE_LONGE} ans</button>` : `<button class="btn or" data-a="longer" ${c.licol ? '' : 'disabled'}>Longer${c.licol ? '' : ' (mets-lui un licol)'}</button>`}
     </div>
-    ${poulain(c) ? `<h3 class="section">Élever ${c.nom} · ${etat.jour - c.naissance} jour${etat.jour - c.naissance > 1 ? 's' : ''} (adulte à ${AGE_ADULTE})</h3>
+    ${poulain(c) ? `<h3 class="section">Élever ${c.nom} · ${ageTexte(c)} (monté à ${AGE_ADULTE} ans)</h3>
       <div class="jauge" style="margin:4px 0 8px"><i style="width:${c.elevage || 0}%;background:var(--or)"></i></div>
       <p class="note">Points d’élevage : ${c.elevage || 0} %. Bien élevé, il gagnera jusqu’à 3 niveaux de plus en devenant adulte.</p>
       <div class="boutons">${SOINS_POULAIN.map(([k, l]) => { const reste = Math.ceil(90 - (maintenant() - (derniersSoins[c.id + 'p' + k] ?? -999))); return `<button class="btn ${reste > 0 ? '' : 'or'}" data-poulain="${k}" ${reste > 0 ? 'disabled' : ''}>${l}${reste > 0 ? ` · ${reste} s` : ''}</button>`; }).join('')}</div>` : ''}
@@ -3557,7 +3564,7 @@ function panneauVente() {
   if (ouvert()) fermer();
   if (enchere) { ouvrir(`<div class="pnj">Maître Gaspard</div><h2>Une vente est en cours</h2><p>${enchere.c.nom} est sur la piste. Réponds avec les boutons Oui ou Non en bas de l’écran.</p>`); return; }
   const dispo = etat.chevaux.filter(c => !(c.id === etat.actif && !etat.aPied) && c.lieu !== 'van');
-  const fiches = dispo.map(c => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span><div><h3>${c.nom}</h3><small>${c.race} · ${sexeTexte(c)}${poulain(c) ? ' · poulain' : ''}${c.elevage ? ` · élevage ${c.elevage} %` : ''}</small></div></div>
+  const fiches = dispo.map(c => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span><div><h3>${c.nom}</h3><small>${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${poulain(c) ? ' · poulain' : ''}${c.elevage ? ` · élevage ${c.elevage} %` : ''}</small></div></div>
     ${blocStats(c.stats, false)}<p class="note" style="margin:4px 0">Valeur estimée : <b>${prixVente(c)} pièces</b></p>
     <div class="boutons">${[['basse', 'Mise à prix basse'], ['normale', 'Normale'], ['haute', 'Haute']].map(([k, l]) => `<button class="btn ${k === 'normale' ? 'or' : ''}" data-vendre="${c.id}" data-mise="${k}">${l} · ${Math.round(prixVente(c) * { basse: 0.5, normale: 0.7, haute: 0.95 }[k] / 5) * 5} p.</button>`).join('')}</div></article>`).join('');
   ouvrir(`<div class="pnj">Maître Gaspard · commissaire-priseur</div><h2>Vendre aux enchères</h2>
@@ -3617,12 +3624,12 @@ function majVente(dt) {
   if (gaspard) { if (gaspard.tBulle > 0 && (gaspard.tBulle -= dt) <= 0 && gaspard.bulle) { gaspard.g.remove(gaspard.bulle); gaspard.bulle = null; } marcher(gaspard, 0, dt); }
   const E = enchere; if (!E) return;
   // le cheval fait le tour de la piste : au pas, ou au trot s'il y a des obstacles, qu'il saute en liberté
-  const v = obstRing.length ? 4 : 1.4;
+  const sauteur = obstRing.length && ageCheval(E.c) >= AGE_SAUT, v = sauteur ? 4 : 1.4;
   E.ang += dt * v / 5.2; const x = VENTE.x + Math.cos(E.ang) * 6.6, z = VENTE.z + Math.sin(E.ang) * 3.4;
   const rot = Math.atan2(-Math.sin(E.ang) * 6.6, Math.cos(E.ang) * 3.4);
   const proche = o => { const d = ((o.angle - E.ang) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI; return d; }; // écart d'angle, signé
   E.tSaut = (E.tSaut || 0) - dt;
-  if (!E.vol && E.tSaut <= 0) for (const o of obstRing) { const d = proche(o); if (d > 0 && d < 0.22) { E.vol = { o, t: 0, duree: 0.75, haut: o.hEff + 0.4 }; E.tSaut = 1.5; break; } }
+  if (sauteur && !E.vol && E.tSaut <= 0) for (const o of obstRing) { const d = proche(o); if (d > 0 && d < 0.22) { E.vol = { o, t: 0, duree: 0.75, haut: o.hEff + 0.4 }; E.tSaut = 1.5; break; } }
   let y = 0, vy = 0;
   if (E.vol) {
     const V = E.vol; V.t += dt; const k = clamp(V.t / V.duree, 0, 1); y = 4 * V.haut * k * (1 - k); vy = 4 * V.haut * (1 - 2 * k) / V.duree;
@@ -4015,7 +4022,7 @@ function majChevalStage(h, dt) {
 
 // ---- Reproduction : une jument et un étalon adultes au paddock de reproduction ; poulain deux jours plus tard,
 // qui grandit en quatre jours (on ne le monte pas avant) et hérite de ses parents, avec un peu de hasard
-const AGE_ADULTE = 4, GESTATION = 2;
+const AGE_ADULTE = 3, GESTATION = 2; // monté à 3 ans (avant le 2026-11-01 : 4 jours)
 const adulte = c => !c.naissance || etat.jour - c.naissance >= AGE_ADULTE;
 const sexeTexte = c => c.sexe === 'jument' ? 'jument' : 'étalon';
 function saillies() {
@@ -4186,7 +4193,7 @@ function nomLibre() {
 function monter(id) {
   const c = etat.chevaux.find(h => h.id === id);
   if (!c || (id === etat.actif && !etat.aPied)) return;
-  if (!adulte(c)) { toast(`${c.nom} est encore un poulain : on pourra le monter dans ${AGE_ADULTE - (etat.jour - c.naissance)} jour(s)`, 'rouge'); return; }
+  if (!adulte(c)) { toast(`${c.nom} n’a que ${ageTexte(c)} : on le monte à ${AGE_ADULTE} ans (encore ${AGE_ADULTE - ageCheval(c)} jour${AGE_ADULTE - ageCheval(c) > 1 ? 's' : ''} de jeu)`, 'rouge'); return; }
   if (c.lieu === 'box' && c.box != null) ouvrirPorteBox(c.box);
   const r = residents.find(x => x.cheval.id === id);
   if (!etat.aPied) { const a = chevalActif(); a.lieu = 'libre'; a.pos = { x: J.x, z: J.z, rot: J.rot }; } // l'ancien cheval reste là où tu étais
@@ -4294,7 +4301,7 @@ function ecurie() {
     return `<article class="fiche ${actif ? 'active' : ''}">
       <div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span>
         <div style="min-width:0;flex:1"><input id="nom-${c.id}" data-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}" maxlength="16" aria-label="Nom du cheval">
-        <small>${c.race} · ${sexeTexte(c)}${c.naissance && !adulte(c) ? ` · poulain de ${etat.jour - c.naissance} j · élevage ${c.elevage || 0} %` : ''}${c.pleine ? ' · pleine' : ''} · ${(ROBES[c.robe] || ROBES.bai).nom}${c.box != null ? ` · box ${c.box + 1}` : ''}${c.lieu === 'pre' && !actif ? ` · au ${prePar(c.pre)?.nom ?? 'pré'}` : ''}${c.lieu === 'libre' && !actif ? ' · en liberté' : ''}</small></div></div>
+        <small>${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${c.naissance && !adulte(c) ? ` · poulain · élevage ${c.elevage || 0} %` : ''}${c.pleine ? ' · pleine' : ''} · ${(ROBES[c.robe] || ROBES.bai).nom}${c.box != null ? ` · box ${c.box + 1}` : ''}${c.lieu === 'pre' && !actif ? ` · ${auPre(c.pre)}` : ''}${c.lieu === 'libre' && !actif ? ' · en liberté' : ''}</small></div></div>
       ${besoinsHtml(c)}${blocStats(c.stats)}
       <small>La barre montre l’expérience vers le niveau suivant.</small>
       <div class="boutons">
@@ -4568,6 +4575,7 @@ function lieuDeLonge() {
 function commencerLonge(r) {
   const c = r.cheval;
   if (!etat.aPied) { toast('Descends de cheval pour longer', 'rouge'); return; }
+  if (ageCheval(c) < AGE_LONGE) { toast(`${c.nom} n’a que ${ageTexte(c)} : on commence la longe à ${AGE_LONGE} ans`, 'rouge'); return; }
   if (!c.licol) { toast(`Mets d’abord un licol à ${c.nom}`, 'rouge'); return; }
   if (r.box) { toast(`${c.nom} est au box : sors-le d’abord (Mener en main, ou l’Écurie)`, 'rouge'); return; }
   if (lecon || balade || concours) { toast('Finis d’abord ton cours ou ta sortie', 'rouge'); return; }
@@ -6178,6 +6186,7 @@ function majCheval(dt) {
     demandeSaut = false;
     if (!J.auSol) { /* déjà en l'air */ }
     else if (J.endu < 8) avis(`${c.nom} est trop fatigué pour sauter`, 'rouge');
+    else if (ageCheval(c) < AGE_SAUT) avis(`${c.nom} n’a que ${ageTexte(c)} : on commence le saut à ${AGE_SAUT} ans`, 'rouge');
     else {
       const o = sautDevant(), refus = Math.max(0, 0.3 - st.lien.niv * 0.03);
       if (o && Math.random() < refus) {
@@ -6467,6 +6476,7 @@ function demarrer(donnees = {}) {
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
+  for (const c of etat.chevaux) if (c.naissance == null && c.age0 == null) { c.age0 = 5 + ([...c.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) % 8); c.jourAge0 = etat.jour; }
   etat.tapis ||= ['uni']; for (const x in etatsStage) delete etatsStage[x];
   construire(); construireSellerie(); NAV.b = null; remettreStagiaires();
   etat.conduite = false; construireVehicules(); construireMarchands(); construireRegional(0.8); offresJour = -1; majOffresMarche();
