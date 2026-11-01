@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 18:10";</script>
+<script>window.VERSION_JEU = "2026-11-01 19:46";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -413,6 +413,9 @@ const LIEUX_CONCOURS = {
   etoiles: { nom: 'Écurie des Étoiles',     x1: 95, x2: 125, z1: 150, z2: 172,  h: 1.2, niv: [10, 14], couleur: 0xf3b52d, texte: 'Grand concours Élite' },
 };
 const departLieu = L => ({ x: L.x1 + 2.5, z: L.z1 + 6 });
+// carré du concours de dressage (2026-11-01) : l'Écurie du Val, entre la route et la salle des ventes
+const CARRES_DR = { val: { nom: 'Écurie du Val', C: { x1: 140, x2: 160, z1: 38, z2: 78 }, couleur: 0x7d4fb0, texte: 'Concours de dressage', niv: [4, 10], dressage: true } };
+const lieuInv = inv => LIEUX_CONCOURS[inv.lieu] || CARRES_DR[inv.lieu];
 // carré de dressage (2026-11-01) : 20 × 40 m à l'ouest du paddock de reproduction, A au sud (entrée), C au nord
 const CARRE = { x1: -100, x2: -80, z1: -12, z2: 28 };
 const LAVAGE = { x: 40, z: 37 };   // aire de lavage des chevaux, à la place de l'ancien gîte (2026-11-01)
@@ -1797,29 +1800,32 @@ function majPoste(r, dt) { // le cheval attaché ne bouge plus ; effets de l'eau
 // ---- Carré de dressage (2026-11-01) : lices blanches basses, lettres, panneau des figures à l'entrée (A).
 // Une figure = une suite de points au sol à passer dans l'ordre, à une allure imposée (trot, galop) ; « arrêt » : rester
 // immobile 2 s sur le point. Note sur 10 : points passés à la bonne allure et précision du tracé.
-const LETTRES = (() => { const C = CARRE, cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2;
-  return { A: [cx, C.z2], K: [C.x1, C.z2 - 6], E: [C.x1, cz], H: [C.x1, C.z1 + 6], C: [cx, C.z1], M: [C.x2, C.z1 + 6], B: [C.x2, cz], F: [C.x2, C.z2 - 6], X: [cx, cz] }; })();
-{
-  const C = CARRE, cx = (C.x1 + C.x2) / 2, g = new THREE.Group(); scene.add(g);
+const lettresDe = C => { const cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2;
+  return { A: [cx, C.z2], K: [C.x1, C.z2 - 6], E: [C.x1, cz], H: [C.x1, C.z1 + 6], C: [cx, C.z1], M: [C.x2, C.z1 + 6], B: [C.x2, cz], F: [C.x2, C.z2 - 6], X: [cx, cz] }; };
+const LETTRES = lettresDe(CARRE);
+function construireCarre(C, nom, panneau = true) { // le carré du ranch, et celui du concours de dressage de l'Écurie du Val
+  const cx = (C.x1 + C.x2) / 2, g = new THREE.Group(); scene.add(g);
   dalle(C.x1, C.z1, C.x2, C.z2, sableMat(4, 8, 0xf5ead2), 0.03);
   const blanc = robeMat(0xf6f3ec, 0.5);
   const lice = (a, b, c2, d) => { const L = Math.hypot(c2 - a, d - b); const m = bloc(c2 === a ? 0.12 : L, 0.3, c2 === a ? L : 0.12, blanc, (a + c2) / 2, 0.2, (b + d) / 2, g); segs.push({ x1: a, z1: b, x2: c2, z2: d, h: 0.45, tag: 'mur' }); return m; };
   lice(C.x1, C.z1, C.x2, C.z1); lice(C.x1, C.z1, C.x1, C.z2); lice(C.x2, C.z1, C.x2, C.z2); lice(C.x1, C.z2, cx - 1.5, C.z2); lice(cx + 1.5, C.z2, C.x2, C.z2);
   for (let x = C.x1; x <= C.x2; x += 4) bloc(0.14, 0.42, 0.14, blanc, x, 0.21, C.z1, g);
-  for (const [nom, [x, z]] of Object.entries(LETTRES)) {
-    if (nom === 'X') continue;
+  for (const [lettre, [x, z]] of Object.entries(lettresDe(C))) {
+    if (lettre === 'X') continue;
     const dx = x === C.x1 ? -0.9 : x === C.x2 ? 0.9 : 0, dz = z === C.z1 ? -0.9 : z === C.z2 ? 0.9 : 0;
     bloc(0.55, 0.65, 0.55, blanc, x + dx, 0.33, z + dz, g);
-    const lab = etiquette(nom, '#2f1f13', '#f3eee4', 0.55); lab.position.set(x + dx, 1.25, z + dz); scene.add(lab);
+    const lab = etiquette(lettre, '#2f1f13', '#f3eee4', 0.55); lab.position.set(x + dx, 1.25, z + dz); scene.add(lab);
   }
-  // panneau des figures, à droite de l'entrée A
-  for (const s2 of [-0.7, 0.7]) maille(cylGeo(0.06, 0.07, 1.8, 8), MAT.bois, cx + 3.5 + s2, 0.9, C.z2 + 2.2, g);
-  bloc(1.7, 1.1, 0.08, MAT.peint, cx + 3.5, 1.5, C.z2 + 2.2, g);
+  if (panneau) { // panneau des figures, à droite de l'entrée A
+    for (const s2 of [-0.7, 0.7]) maille(cylGeo(0.06, 0.07, 1.8, 8), MAT.bois, cx + 3.5 + s2, 0.9, C.z2 + 2.2, g);
+    bloc(1.7, 1.1, 0.08, MAT.peint, cx + 3.5, 1.5, C.z2 + 2.2, g);
+  } else for (let k = 0; k < 2; k++) { const h = 0.45 + k * 0.45; bloc(C.z2 - C.z1 - 6, 0.1, 0.9, MAT.bois, C.x2 + 2 + k * 0.9, h, (C.z1 + C.z2) / 2, g).rotation.y = Math.PI / 2; } // bancs du public
   fusionner(g);
-  const lab = etiquette('Carré de dressage · figures', '#fbf1dc', 'rgba(125,79,176,.95)', 0.6); lab.position.set(cx + 3.5, 2.5, C.z2 + 2.2); scene.add(lab);
+  const lab = etiquette(nom, '#fbf1dc', 'rgba(125,79,176,.95)', panneau ? 0.6 : 0.9); lab.position.set(panneau ? cx + 3.5 : cx, panneau ? 2.5 : 3.4, C.z2 + (panneau ? 2.2 : 3)); scene.add(lab);
 }
-const FIGURES = (() => {
-  const C = CARRE, cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2, d = 1.3, pts = [];
+construireCarre(CARRE, 'Carré de dressage · figures');
+function figuresDe(C) {
+  const cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2, d = 1.3, pts = [];
   const cercle = (ox, oz, r, a0, sens = 1, n = 16) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + sens * i / n * Math.PI * 2; return { x: ox + Math.sin(a) * r, z: oz + Math.cos(a) * r }; });
   const ligne = (a, b, pas = 2.5) => { const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / pas)); return Array.from({ length: n + 1 }, (_, i) => ({ x: a.x + (b.x - a.x) * i / n, z: a.z + (b.z - a.z) * i / n })); };
   const coins = [{ x: cx, z: C.z2 - d }, { x: C.x1 + d, z: C.z2 - d }, { x: C.x1 + d, z: C.z1 + d }, { x: C.x2 - d, z: C.z1 + d }, { x: C.x2 - d, z: C.z2 - d }, { x: cx, z: C.z2 - d }];
@@ -1833,12 +1839,13 @@ const FIGURES = (() => {
     arretX: { nom: 'Arrêt en X', texte: 'Entre en A sur la ligne du milieu, arrête-toi 2 secondes en X (lâche la touche Avancer), puis repars jusqu’en C.', allure: 'trot', pts: [...ligne({ x: cx, z: C.z2 - 0.5 }, { x: cx, z: cz }).slice(0, -1), { x: cx, z: cz, arret: true }, ...ligne({ x: cx, z: cz }, { x: cx, z: C.z1 + d }).slice(1)], xp: ['lien', 4] },
     cercleC: { nom: 'Cercle au galop en C', texte: 'Un cercle de 20 m à l’extrémité C, au galop (garde la touche Maj).', allure: 'galop', pts: cercle(cx, C.z1 + 10, 8.7, 0), xp: ['vitesse', 4] },
   };
-})();
+}
+const FIGURES = figuresDe(CARRE);
 const REPRISE = ['piste', 'cercleA', 'diagonale', 'arretX', 'cercleC'];
 let dressageCarre = null, reperesCarre = null;
 function panneauDressage() {
   if (ouvert()) fermer();
-  if (dressageCarre) { ouvrir(`<div class="pnj">Carré de dressage</div><h2>${FIGURES[dressageCarre.figs[dressageCarre.f]].nom}</h2><p>Une figure est en cours.</p><div class="boutons"><button class="btn" id="dr-stop">Arrêter</button></div>`); $('#dr-stop').onclick = () => { fermer(); finirDressageCarre(true); }; return; }
+  if (dressageCarre) { ouvrir(`<div class="pnj">Carré de dressage</div><h2>${dressageCarre.jeu[dressageCarre.figs[dressageCarre.f]].nom}</h2><p>Une figure est en cours.</p><div class="boutons"><button class="btn" id="dr-stop">Arrêter</button></div>`); $('#dr-stop').onclick = () => { fermer(); finirDressageCarre(true); }; return; }
   const m = etat.dressageNotes ||= {};
   const lignes = Object.entries(FIGURES).map(([k, F]) => `<article class="fiche"><h3>${F.nom}</h3><small>${F.texte}</small><small>Allure : ${F.allure}${m[k] != null ? ` · meilleure note : ${m[k]}/10` : ''}</small>
     <div class="boutons"><button class="btn or" data-figure="${k}">Faire cette figure</button></div></article>`).join('');
@@ -1849,15 +1856,15 @@ function panneauDressage() {
   $('#contenu').querySelectorAll('[data-figure]').forEach(b => b.onclick = () => commencerDressageCarre([b.dataset.figure]));
   $('#dr-reprise').onclick = () => commencerDressageCarre(REPRISE, true);
 }
-function commencerDressageCarre(figs, reprise = false) {
+function commencerDressageCarre(figs, reprise = false, opts = {}) {
   if (etat.aPied) { toast('Monte à cheval pour faire ta figure (M)', 'rouge'); return; }
-  if (parcours.actif || concours || lecon || balade) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
-  fermer(); dressageCarre = { figs, f: 0, i: 0, points: 0, max: 0, reprise, arret: 0, notes: [] }; placerReperes(); son(660, 0.12, 'triangle', 0.05);
-  toast(`${FIGURES[figs[0]].nom} : passe les repères dans l’ordre, au ${FIGURES[figs[0]].allure}`, 'or');
+  if (!opts.concours && (parcours.actif || concours || concoursDr || lecon || (balade && balade.type !== 'dressage'))) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  fermer(); dressageCarre = { figs, f: 0, i: 0, points: 0, max: 0, reprise, arret: 0, notes: [], jeu: opts.jeu || FIGURES, concours: !!opts.concours }; placerReperes(); son(660, 0.12, 'triangle', 0.05);
+  const F0 = dressageCarre.jeu[figs[0]]; toast(`${F0.nom} : passe les repères dans l’ordre, au ${F0.allure}`, 'or');
 }
 function placerReperes() {
   if (reperesCarre) scene.remove(reperesCarre);
-  const F = FIGURES[dressageCarre.figs[dressageCarre.f]]; reperesCarre = new THREE.Group(); scene.add(reperesCarre);
+  const F = dressageCarre.jeu[dressageCarre.figs[dressageCarre.f]]; reperesCarre = new THREE.Group(); scene.add(reperesCarre);
   F.pts.forEach(p => { const d = new THREE.Mesh(new THREE.CircleGeometry(p.arret ? 0.6 : 0.32, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })); d.rotation.x = -Math.PI / 2; d.position.set(p.x, 0.06, p.z); reperesCarre.add(d); });
   dressageCarre.i = 0; dressageCarre.arret = 0; dressageCarre.pFig = 0; dressageCarre.mFig = 0; majReperes();
 }
@@ -1868,7 +1875,7 @@ function majReperes() {
 function majDressageCarre(dt) {
   const D = dressageCarre; if (!D) return;
   if (etat.aPied) { finirDressageCarre(true); return; }
-  const F = FIGURES[D.figs[D.f]], p = F.pts[D.i], v = Math.abs(J.vit), dist = Math.hypot(J.x - p.x, J.z - p.z);
+  const F = D.jeu[D.figs[D.f]], p = F.pts[D.i], v = Math.abs(J.vit), dist = Math.hypot(J.x - p.x, J.z - p.z);
   const bonneAllure = F.allure === 'galop' ? v >= 8 : v > 2.5 && v < 8.5;
   if (p.arret) {
     if (dist < 1.6 && v < 0.6) { D.arret += dt; if (D.arret >= 2) { D.pFig += 1.5; D.mFig += 1.5; D.i++; toast('Bel arrêt !', 'or'); son(700, 0.1, 'triangle', 0.05); majReperes(); } }
@@ -1884,21 +1891,23 @@ function majDressageCarre(dt) {
   if (D.i >= F.pts.length) {
     const note = Math.round(D.pFig / Math.max(1, D.mFig) * 100) / 10; D.notes.push(note);
     const [stat, n] = F.xp; gagnerXp(chevalActif(), stat, Math.round(n * note / 10) + 1); gagnerXp(chevalActif(), 'dressage', Math.round(4 * note / 10) + 1);
+    if (balade?.type === 'dressage') noterGroupe(note, F);
     const m = etat.dressageNotes ||= {}; if (!D.reprise && (m[D.figs[D.f]] == null || note > m[D.figs[D.f]])) m[D.figs[D.f]] = note;
-    if (D.f + 1 < D.figs.length) { toast(`${F.nom} : ${note}/10. Figure suivante : ${FIGURES[D.figs[D.f + 1]].nom}`, 'or'); D.f++; placerReperes(); }
+    if (D.f + 1 < D.figs.length) { toast(`${F.nom} : ${note}/10. Figure suivante : ${D.jeu[D.figs[D.f + 1]].nom}`, 'or'); D.f++; placerReperes(); }
     else finirDressageCarre(false);
   }
 }
 function finirDressageCarre(arrete) {
   const D = dressageCarre; dressageCarre = null; if (reperesCarre) { scene.remove(reperesCarre); reperesCarre = null; }
+  if (D?.concours) { const note = arrete || !D.notes.length ? 0 : Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10; toast(`Ta reprise : ${fr(note, 1)}/10`, note >= 7 ? 'or' : ''); noteJoueurConcoursDr(note); return; }
   if (!D || arrete) { if (D) toast('Figure arrêtée'); return; }
   const note = Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10, gain = Math.round(note * (D.reprise ? 6 : 2));
   etat.pieces += gain; etat.compteurs.dressageCarre = (etat.compteurs.dressageCarre || 0) + 1;
   if (D.reprise) { const m = etat.dressageNotes ||= {}; if (m.reprise == null || note > m.reprise) m.reprise = note; }
   const avis = note >= 9 ? 'Excellent !' : note >= 7.5 ? 'Très bien !' : note >= 6 ? 'Bien.' : note >= 4.5 ? 'Assez bien, à retravailler.' : 'À retravailler.';
   sonPiece(); sauver();
-  ouvrir(`<div class="pnj">Inès · juge de dressage</div><h2>${D.reprise ? 'Reprise' : FIGURES[D.figs[0]].nom} : ${note}/10</h2>
-    <p><b>${avis}</b> ${D.reprise ? D.figs.map((k, i) => `${FIGURES[k].nom} : ${D.notes[i]}/10`).join(' · ') : ''}</p><p>+${gain} pièces.</p>
+  ouvrir(`<div class="pnj">Inès · juge de dressage</div><h2>${D.reprise ? 'Reprise' : D.jeu[D.figs[0]].nom} : ${note}/10</h2>
+    <p><b>${avis}</b> ${D.reprise ? D.figs.map((k, i) => `${D.jeu[k].nom} : ${D.notes[i]}/10`).join(' · ') : ''}</p><p>+${gain} pièces.</p>
     <div class="boutons"><button class="btn or" id="dr-encore">Choisir une autre figure</button></div>`);
   $('#dr-encore').onclick = () => panneauDressage();
 }
@@ -1921,14 +1930,67 @@ function construireLieux() { // sable, lices blanches avec une entrée à l'oues
       obstacle({ x, z, a: Math.PI / 2, h: i === 0 ? Math.max(0.5, L.h - 0.2) : L.h, type: L.h < 0.7 && i === 2 ? 'vertical' : types[i], num: i + 1, terrain: k, larg: 3.2 }));
     regrouper(n0, cx, cz, 160);
   }
+  for (const D of Object.values(CARRES_DR)) { const n0 = scene.children.length; construireCarre(D.C, `${D.nom} · concours de dressage`, false); D.jeu = figuresDe(D.C); regrouper(n0, (D.C.x1 + D.C.x2) / 2, (D.C.z1 + D.C.z2) / 2, 160); }
+}
+// ---- Concours de dressage : chaque concurrent fait sa reprise au carré, l'un après l'autre ; les autres sont notés d'après
+// les points de dressage de leur cheval, leur niveau et leur humeur ; le joueur, s'il participe, passe en dernier et fait
+// la vraie reprise (repères au sol)
+const REPRISE_CONCOURS = ['piste', 'cercleA', 'diagonale', 'arretX', 'cercleC'], REPRISE_PNJ = ['piste', 'cercleA', 'diagonale', 'cercleC'];
+let concoursDr = null;
+function lancerConcoursDressage(entrees, opts) {
+  fermer();
+  const file = entrees.map(x => ({ ...x, note: null })).sort((a, b) => (a.type === 'joueur') - (b.type === 'joueur'));
+  concoursDr = { file, i: -1, cav: null, pause: 3, jeu: opts.jeu, carre: opts.carre, nomLieu: opts.nomLieu, type: opts.type, attente: false };
+  for (const F of file) if (F.e) { F.e.etat = 'concours'; F.e.p.g.visible = false; }
+  construireChevauxStage();
+  toast(`Concours de dressage : ${file.map(F => F.nom).join(', ')}`, 'or');
+}
+function majConcoursDressage(dt) {
+  const C = concoursDr; if (!C) return;
+  if (C.attente) { if (!dressageCarre && !etat.aPied && !C.lance) { C.lance = true; commencerDressageCarre(REPRISE_CONCOURS, true, { jeu: C.jeu, concours: true }); } return; }
+  if (!C.cav) {
+    C.pause -= dt; if (C.pause > 0) return;
+    C.i++; if (C.i >= C.file.length) { finirConcoursDressage(); return; }
+    const F = C.file[C.i];
+    if (F.type === 'joueur') { C.attente = true; C.lance = false; C.cav = { F, joueur: true }; toast(`À toi ! ${etat.aPied ? 'Monte à cheval (M) : ' : ''}ta reprise commence, suis les repères sur le sable`, 'or'); return; }
+    const pts = REPRISE_PNJ.flatMap(k => C.jeu[k].pts), m = modeleCheval(F.cheval, true, F.tenue); scene.add(m.g);
+    C.cav = { F, m, pts, i: 0, x: pts[0].x, z: pts[0].z, rot: 0 }; toast(`Au carré : ${F.nom} (${F.ranch}) sur ${F.cheval.nom}`, 'or'); return;
+  }
+  const K = C.cav, v = 5.2; let reste = v * dt;
+  while (reste > 0 && K.i < K.pts.length) { const p = K.pts[K.i], dx = p.x - K.x, dz = p.z - K.z, d = Math.hypot(dx, dz); if (d <= reste) { K.x = p.x; K.z = p.z; K.i++; reste -= d; } else { K.x += dx / d * reste; K.z += dz / d * reste; K.rot = Math.atan2(dx, dz); reste = 0; } }
+  K.m.g.position.set(K.x, 0, K.z); K.m.g.rotation.y = K.rot; animer(K.m, v, 0, false, dt);
+  if (K.i >= K.pts.length) {
+    const F = K.F, dr = F.cheval.stats.dressage?.niv ?? 2;
+    F.note = Math.round(clamp(3 + dr * 0.5 + (F.niveau || 5) * 0.12 + ((F.humeur ?? 70) - 50) / 50 + rand(-0.8, 0.8), 2, 9.8) * 10) / 10;
+    scene.remove(K.m.g); C.cav = null; C.pause = 2.5; toast(`${F.nom} : ${fr(F.note, 1)}/10`, F.note >= 7 ? 'or' : '');
+  }
+}
+function noteJoueurConcoursDr(note) { const C = concoursDr; if (!C?.attente) return; C.cav.F.note = note; C.attente = false; C.cav = null; C.pause = 2.5; }
+function finirConcoursDressage() {
+  const C = concoursDr; concoursDr = null;
+  const cl = [...C.file].sort((a, b) => (b.note ?? 0) - (a.note ?? 0)); let total = 0;
+  const lignes = cl.map((F, r) => {
+    const gain = F.type !== 'visiteur' ? (PRIX_CONCOURS[r] ?? 20) : 0; total += gain;
+    if (F.type === 'enfant') { F.s.humeur = clamp(F.s.humeur + (r === 0 ? 25 : r === 1 ? 15 : 8), 0, 100); F.s.dernier = etat.jour; gagnerXp(F.cheval, 'dressage', 4); retourAuBanc(F.e, 58 + r * 1.6, 20); }
+    if (F.type === 'joueur') gagnerXp(F.cheval, 'dressage', 8 - Math.min(6, r * 2));
+    return `<div><span><b>${r + 1}${r ? 'e' : 'er'}</b> · ${F.nom}${F.type === 'visiteur' ? ` <small>(${F.ranch})</small>` : ''} sur ${F.cheval.nom} · ${fr(F.note ?? 0, 1)}/10</span><b>${gain ? gain + ' p.' : ''}</b></div>`;
+  });
+  const frais = C.type === 'ouvert' ? 40 * C.file.filter(F => F.type === 'visiteur').length : 0;
+  etat.pieces += total + frais; etat.compteurs.concoursDressage = (etat.compteurs.concoursDressage || 0) + 1; construireChevauxStage(); sonPiece(); sauver();
+  if (C.type === 'ouvert') setTimeout(retirerVisiteurs, 4000);
+  if (C.type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; }
+  ouvrir(`<div class="pnj">Concours de dressage · ${C.nomLieu}${C.type === 'club' ? ' · retour au ranch en van' : ''} · jour ${etat.jour}</div><h2>${cl[0].type === 'joueur' ? 'Tu gagnes le concours de dressage !' : `Victoire de ${cl[0].nom} !`}</h2>
+    <div class="aide-grille">${lignes.join('')}</div><p>${frais ? `Engagements des invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement à la note de la reprise, sur 10.</p>
+    <button class="btn or gros" id="ok">Bravo à tous</button>`);
+  $('#ok').onclick = fermer;
 }
 // ---- Invitations aux concours (2026-11-01) : elles arrivent au fil des jours, pour toi et pour tes élèves. Tu demandes à
 // chaque enfant s'il veut venir (il répond selon son niveau, son humeur, ce qu'il aime), puis, le jour venu, vous partez
 // au terrain du club (en van : on y est tout de suite) et le concours se court là-bas.
 const mesInvitations = () => etat.invitations ||= [];
 function nouvelleInvitation(dans = null) {
-  const L = Object.keys(LIEUX_CONCOURS), lieu = pick(L);
-  const inv = { id: 'i' + Date.now().toString(36) + Math.floor(Math.random() * 99), lieu, jour: etat.jour + (dans ?? 1 + Math.floor(Math.random() * 3)), reponses: {}, moi: true };
+  const dressage = Math.random() < 0.33, L = Object.keys(LIEUX_CONCOURS), lieu = dressage ? 'val' : pick(L);
+  const inv = { id: 'i' + Date.now().toString(36) + Math.floor(Math.random() * 99), lieu, discipline: dressage ? 'dressage' : 'saut', jour: etat.jour + (dans ?? 1 + Math.floor(Math.random() * 3)), reponses: {}, moi: true };
   mesInvitations().push(inv); return inv;
 }
 function invitationsDuJour() { // à minuit : on retire les anciennes, il en arrive parfois une nouvelle
@@ -1937,9 +1999,14 @@ function invitationsDuJour() { // à minuit : on retire les anciennes, il en arr
   if (l.length < 3 && Math.random() < 0.75) { const inv = nouvelleInvitation(); setTimeout(() => toast(`Invitation : ${LIEUX_CONCOURS[inv.lieu].nom} t’invite au concours du jour ${inv.jour}, toi et tes élèves (bouton Concours, touche J)`, 'or'), 5200); }
 }
 function reponseEnfant(e, inv) {
-  const L = inv.lieu ? LIEUX_CONCOURS[inv.lieu] : { h: inv.h }, hMax = niveauDe(e.niveau || 1).hMax, aimeSaut = hashNom(e.nom) % 10 < 7, f = e.genre === 'f';
+  const L = inv.lieu ? lieuInv(inv) : { h: inv.h }, hMax = niveauDe(e.niveau || 1).hMax, aimeSaut = hashNom(e.nom) % 10 < 7, f = e.genre === 'f';
   if (inv.jour >= e.s.depart) return ['non', `Je serai déjà rentré${f ? 'e' : ''} chez moi ce jour-là…`];
   if (e.s.humeur < 30) return ['non', 'Je n’ai pas trop le moral pour un concours…'];
+  if (inv.discipline === 'dressage') {
+    if ((e.niveau || 1) < 3) return ['non', 'Je ne sais pas encore assez bien faire les figures…'];
+    if (aimeSaut && Math.random() < 0.5) return ['non', 'Bof… moi je préfère sauter !'];
+    return ['oui', pick(['Oui ! J’adore le dressage !', 'Avec plaisir, je vais faire de beaux cercles !', 'Oui, mon cheval est trop élégant !', 'D’accord, mais je vais réviser ma reprise !'])];
+  }
   if (L.h > hMax + 0.15) return ['non', `${fr(L.h, 1)} m ? C’est trop haut pour moi pour l’instant !`];
   if (!aimeSaut && Math.random() < 0.6) return ['non', 'Bof… moi je préfère le dressage.'];
   return ['oui', pick(['Oh oui, trop bien !', 'Oui ! Je vais tout gagner !', 'Avec plaisir, mon cheval adore sauter !', `Oui… mais j’ai un peu peur !`, 'Trop cool, j’en rêvais !'])];
@@ -1949,8 +2016,8 @@ function panneauInvitations() {
   const l = mesInvitations().sort((a, b) => a.jour - b.jour);
   const enfants = eleves.filter(e => e.p.g.visible || e.etat === 'dort');
   const cartes = l.map(inv => {
-    const L = LIEUX_CONCOURS[inv.lieu], aujourdhui = inv.jour === etat.jour, oui = Object.entries(inv.reponses).filter(([, r]) => r[0] === 'oui').map(([n]) => n);
-    return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(L.couleur)}"></span><div><h3>${L.nom}</h3><small>${L.texte} · obstacles de ${fr(L.h, 1)} m · ${aujourdhui ? '<b style="color:var(--or)">aujourd’hui !</b>' : `jour ${inv.jour}`}</small></div></div>
+    const L = lieuInv(inv), aujourdhui = inv.jour === etat.jour, oui = Object.entries(inv.reponses).filter(([, r]) => r[0] === 'oui').map(([n]) => n);
+    return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(L.couleur)}"></span><div><h3>${L.nom}</h3><small>${L.texte} · ${inv.discipline === 'dressage' ? 'reprise de dressage' : `obstacles de ${fr(L.h, 1)} m`} · ${aujourdhui ? '<b style="color:var(--or)">aujourd’hui !</b>' : `jour ${inv.jour}`}</small></div></div>
       <label class="choix"><input type="checkbox" data-moi="${inv.id}" ${inv.moi ? 'checked' : ''}> Je participe aussi (avec le cheval que je monte)</label>
       <h3 class="section">Demander à tes élèves</h3>
       ${enfants.length ? enfants.map(e => { const r = inv.reponses[e.nom]; return `<div style="margin:4px 0">${r ? `<b>${e.nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-demander="${inv.id}|${e.nom}">Demander à ${e.nom} (niveau ${e.niveau})</button>`}</div>`; }).join('') : '<p class="note">Aucun élève en stage pour l’instant.</p>'}
@@ -1974,17 +2041,17 @@ function panneauInvitations() {
 // ---- Ton concours à toi (2026-11-01) : tu choisis le jour, tu envoies les invitations aux autres ranchs et clubs (ils
 // répondent oui ou non, avec combien de cavaliers), tu demandes à tes élèves ; le jour venu, les invités arrivent en van
 // et le concours se court dans ta carrière (chaque cavalier invité te paie 40 pièces d'engagement).
-const CLUBS_INVITABLES = () => [...Object.values(LIEUX_CONCOURS).map(L => L.nom), ...RANCHS.filter(r => !Object.values(LIEUX_CONCOURS).some(L => L.nom === r))];
+const CLUBS_INVITABLES = () => [...Object.values(LIEUX_CONCOURS).map(L => L.nom), ...Object.values(CARRES_DR).map(L => L.nom), ...RANCHS.filter(r => ![...Object.values(LIEUX_CONCOURS), ...Object.values(CARRES_DR)].some(L => L.nom === r))];
 const hauteurCarriere = () => Math.max(...etat.carriere.obstacles.map(o => hEff(o.type, o.h)));
 function blocMonConcours() {
   const M = etat.monConcours;
   if (M && M.jour < etat.jour) etat.monConcours = null;
   if (!etat.monConcours) return `<h3 class="section">Organiser ton concours au Ranch des Quatre Vents</h3>
     <p class="note">Choisis le jour, puis envoie tes invitations aux autres ranchs. Le parcours est celui de ta carrière (hauteur max actuelle : ${fr(hauteurCarriere(), 2)} m, à régler au tableau du matériel).</p>
-    <div class="boutons">${[1, 2, 3].map(n => `<button class="btn or" data-organiser="${n}">Le jour ${etat.jour + n}</button>`).join('')}</div>`;
+    <div class="boutons">${[1, 2, 3].map(n => `<button class="btn or" data-organiser="${n}|saut">Saut · jour ${etat.jour + n}</button><button class="btn" data-organiser="${n}|dressage">Dressage · jour ${etat.jour + n}</button>`).join('')}</div>`;
   const C = etat.monConcours, invites = Object.entries(C.clubs).filter(([, r]) => r?.[0] === 'oui'), nbInvites = invites.reduce((t, [, r]) => t + r[2], 0);
   const enfants = eleves.filter(e => e.p.g.visible || e.etat === 'dort'), aujourdhui = C.jour === etat.jour;
-  return `<h3 class="section">Ton concours · jour ${C.jour}${aujourdhui ? ' (aujourd’hui !)' : ''}</h3>
+  return `<h3 class="section">Ton concours ${C.discipline === 'dressage' ? 'de dressage (au carré)' : 'de saut (à la carrière)'} · jour ${C.jour}${aujourdhui ? ' (aujourd’hui !)' : ''}</h3>
     <p class="note">${nbInvites} cavalier${nbInvites > 1 ? 's' : ''} invité${nbInvites > 1 ? 's' : ''} ${nbInvites > 1 ? 'viendront' : 'viendra'} : ${nbInvites * 40} pièces d’engagement pour toi.</p>
     ${CLUBS_INVITABLES().map(nom => { const r = C.clubs[nom]; return `<div style="margin:4px 0">${r ? `<b>${nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-inviter="${nom}">Envoyer une invitation à ${nom}</button>`}</div>`; }).join('')}
     <h3 class="section">Tes élèves</h3>
@@ -1998,10 +2065,10 @@ function panneauRanchs() {
   if (ouvert()) fermer();
   const M = etat.monConcours && etat.monConcours.jour >= etat.jour ? etat.monConcours : null;
   const cartes = CLUBS_INVITABLES().map(nom => {
-    const cle = Object.keys(LIEUX_CONCOURS).find(k => LIEUX_CONCOURS[k].nom === nom), L = cle && LIEUX_CONCOURS[cle];
+    const cle = [...Object.keys(LIEUX_CONCOURS), ...Object.keys(CARRES_DR)].find(k => lieuInv({ lieu: k }).nom === nom), L = cle && lieuInv({ lieu: cle });
     const recue = cle && mesInvitations().find(i => i.lieu === cle), rep2 = M?.clubs[nom];
     return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(L ? L.couleur : 0x8d5a3b)}"></span><div><h3>${nom}</h3>
-      <small>${L ? `${L.texte} · terrain de concours, obstacles de ${fr(L.h, 1)} m` : 'Ranch voisin'}</small></div></div>
+      <small>${L ? (L.dressage ? `${L.texte} · carré de dressage` : `${L.texte} · terrain de concours, obstacles de ${fr(L.h, 1)} m`) : 'Ranch voisin'}</small></div></div>
       ${recue ? `<p class="note" style="color:var(--or);margin:4px 0">Il t’invite à son concours du jour ${recue.jour}.</p><div class="boutons"><button class="btn" data-voir-invit="1">Voir l’invitation</button></div>` : ''}
       <div class="boutons">${!M ? '<span class="note">Choisis d’abord le jour de ton concours, en haut.</span>' : rep2 ? `<span style="color:${rep2[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${rep2[1]} »</span>` : `<button class="btn or" data-inviter-ranch="${nom}">L’inviter à mon concours</button>`}</div></article>`;
   }).join('');
@@ -2022,17 +2089,17 @@ function reponseClub(nom) {
   return ['oui', pick([`Avec plaisir ! Nous viendrons avec ${n} cavalier${n > 1 ? 's' : ''}.`, `Merci pour l’invitation : ${n} de nos cavaliers seront là !`, `Super ! On amène ${n} cheva${n > 1 ? 'ux' : 'l'} en van.`]), n];
 }
 function brancherMonConcours(C) {
-  C.querySelectorAll('[data-organiser]').forEach(b => b.onclick = () => { etat.monConcours = { jour: etat.jour + +b.dataset.organiser, clubs: {}, eleves: {}, moi: true }; sauver(); panneauInvitations(); });
+  C.querySelectorAll('[data-organiser]').forEach(b => b.onclick = () => { const [n, d] = b.dataset.organiser.split('|'); etat.monConcours = { jour: etat.jour + +n, discipline: d, clubs: {}, eleves: {}, moi: true }; sauver(); panneauInvitations(); });
   const M = etat.monConcours; if (!M) return;
   C.querySelectorAll('[data-inviter]').forEach(b => b.onclick = () => { M.clubs[b.dataset.inviter] = reponseClub(b.dataset.inviter); son(520, 0.08, 'triangle', 0.04); sauver(); panneauInvitations(); });
-  C.querySelectorAll('[data-mon-eleve]').forEach(b => b.onclick = () => { const e = eleves.find(x => x.nom === b.dataset.monEleve); if (!e) return; M.eleves[e.nom] = reponseEnfant(e, { jour: M.jour, lieu: null, h: hauteurCarriere() }); sauver(); panneauInvitations(); });
+  C.querySelectorAll('[data-mon-eleve]').forEach(b => b.onclick = () => { const e = eleves.find(x => x.nom === b.dataset.monEleve); if (!e) return; M.eleves[e.nom] = reponseEnfant(e, { jour: M.jour, lieu: null, h: hauteurCarriere(), discipline: M.discipline || 'saut' }); sauver(); panneauInvitations(); });
   const mm = $('#mon-moi'); if (mm) mm.onchange = () => { M.moi = mm.checked; sauver(); };
   const an = $('#mon-annuler'); if (an) an.onclick = () => { etat.monConcours = null; sauver(); panneauInvitations(); };
   const la = $('#mon-lancer'); if (la) la.onclick = () => lancerMonConcours();
 }
 function lancerMonConcours() {
   const M = etat.monConcours; if (!M) return;
-  if (concours || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  if (concours || concoursDr || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
   if (M.moi && etat.aPied) { toast('Monte à cheval pour courir (M), ou décoche « Je cours aussi »', 'rouge'); return; }
   const clubs = Object.entries(M.clubs).filter(([, r]) => r?.[0] === 'oui');
   const visiteurs = clubs.flatMap(([nom, r]) => entreesVisiteurs(r[2], [Math.max(2, Math.round(hauteurCarriere() * 10) - 3), Math.round(hauteurCarriere() * 10) + 3], [nom]));
@@ -2046,11 +2113,12 @@ function lancerMonConcours() {
     const lab = etiquette(nom, '#fbf1dc', 'rgba(38,25,15,.8)', 0.5); lab.position.set(VISITEURS.x1 + 5 + (i % 4) * 7, 3.2, VISITEURS.z1 + 9 - Math.floor(i / 4) * 6); scene.add(lab); visiteursDecor.push(lab);
   });
   toast(`Tes invités arrivent : ${clubs.map(([n]) => n).join(', ') || 'personne d’autre, entre vous'}`, 'or');
+  if (M.discipline === 'dressage') { J.x = (CARRE.x1 + CARRE.x2) / 2; J.z = CARRE.z2 + 4; J.rot = Math.PI; J.vit = 0; camPrete = false; lancerConcoursDressage([...visiteurs.map(v => { v.cheval.stats.dressage = { niv: Math.min(10, 2 + Math.floor(v.niveau / 2)), xp: 0 }; return v; }), ...enfants.map(entreeEnfant), ...(M.moi ? [entreeJoueur()] : [])], { carre: CARRE, jeu: FIGURES, nomLieu: 'Ranch des Quatre Vents', type: 'ouvert' }); return; }
   lancerConcours([...visiteurs, ...enfants.map(entreeEnfant), ...(M.moi ? [entreeJoueur()] : [])], { type: 'ouvert', pause: 6 });
 }
 function partirAuConcours(inv) {
-  if (!inv) return; const L = LIEUX_CONCOURS[inv.lieu];
-  if (concours || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  if (!inv) return; const L = lieuInv(inv);
+  if (concours || concoursDr || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
   if (inv.moi && etat.aPied) { toast('Monte à cheval pour participer (M), ou décoche « Je participe aussi »', 'rouge'); return; }
   const enfants = Object.entries(inv.reponses).filter(([, r]) => r[0] === 'oui').map(([n]) => eleves.find(e => e.nom === n))
     .filter(e => e && !['lecon', 'balade', 'concours', 'part'].includes(e.etat));
@@ -2058,8 +2126,13 @@ function partirAuConcours(inv) {
   const cout = 15 * (enfants.length + (inv.moi ? 1 : 0)); if (etat.pieces < cout) { toast(`Il faut ${cout} pièces d’inscription`, 'rouge'); return; }
   etat.pieces -= cout; mesInvitations().splice(mesInvitations().indexOf(inv), 1);
   for (const e of enfants) { if (e.etat === 'dort') lever(e); if (e.etat === 'mange' || e.etat === 'attendDej') { asseoir(e, false); e.place_cantine = null; } }
-  const d = departLieu(L); J.x = d.x - 3; J.z = d.z; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; // le van vous dépose à l'entrée
   const entrees = [...enfants.map(entreeEnfant), ...entreesVisiteurs(3, L.niv), ...(inv.moi ? [entreeJoueur()] : [])];
+  if (inv.discipline === 'dressage') { // le van vous dépose devant l'entrée A du carré
+    J.x = (L.C.x1 + L.C.x2) / 2; J.z = L.C.z2 + 4; J.rot = Math.PI; J.vit = 0; camPrete = false;
+    lancerConcoursDressage(entrees, { carre: L.C, jeu: L.jeu, nomLieu: L.nom, type: 'club' });
+    toast(`Arrivée à l’${L.nom.replace(/^Écurie/, 'Écurie')} pour le concours de dressage !`, 'or'); return;
+  }
+  const d = departLieu(L); J.x = d.x - 3; J.z = d.z; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; // le van vous dépose à l'entrée
   lancerConcours(entrees, { type: 'club', terrain: inv.lieu, pause: 4 });
   concours.nomLieu = L.nom;
   toast(`Arrivée au ${L.nom} ! ${enfants.length ? `${enfants.map(e => e.nom).join(', ')} ${enfants.length > 1 ? 'concourent' : 'concourt'}` : ''}${inv.moi ? ' · tu passes en dernier' : ''}`, 'or');
@@ -2148,6 +2221,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  for (const D of Object.values(CARRES_DR)) if (x > D.C.x1 - 6 && x < D.C.x2 + 8 && z > D.C.z1 - 6 && z < D.C.z2 + 8) return false;
   for (const L of Object.values(LIEUX_CONCOURS)) if (x > L.x1 - 6 && x < L.x2 + 6 && z > L.z1 - 6 && z < L.z2 + 8) return false;
   if (x > CARRE.x1 - 6 && x < CARRE.x2 + 6 && z > CARRE.z1 - 6 && z < CARRE.z2 + 8) return false;
   if (Math.abs(x - LAVAGE.x) < 7 && Math.abs(z - LAVAGE.z) < 7) return false;
@@ -3544,7 +3618,7 @@ function descendre() {
   J.x += Math.cos(J.rot) * 1.3; J.z -= Math.sin(J.rot) * 1.3; // pied à terre à gauche, côté montoir
   construirePieton(); majResidents(); camPrete = false; sauver();
   toast(`Tu descends de ${c.nom}`);
-  if (balade) finirBalade(balade.type === 'carriere');
+  if (balade) finirBalade(balade.type === 'carriere' || balade.type === 'dressage');
 }
 function residentProche(dMax = 3) {
   let best = null, bd = dMax;
@@ -5564,12 +5638,13 @@ function proposerLecon(e0) {
   ouvrir(`<div class="pnj">Enfants au banc · ${dispo.length} sur ${etat.stagiaires.length}</div><h2>Que faisons-nous ?</h2>
     <p>Coche les cavaliers (cinq au plus). Chaque jour où un enfant monte, il gagne un niveau le lendemain. <b>Manège</b> : tu donnes les ordres au groupe avec 1 à 5. <b>Carrière</b> : ils te suivent à cheval et sautent là où tu sautes. <b>Balade</b> : ils te suivent sur le sentier du lac. <b>Concours</b> : les ${JOURS_CONCOURS} derniers jours du stage, ils courent le parcours de la carrière.</p>
     <div class="grille">${fiches}</div>
-    <div class="boutons" style="margin-top:14px"><button class="btn or" id="b-cours">Cours au manège couvert</button><button class="btn" id="b-carriere">Cours en carrière</button><button class="btn" id="b-marche">Sortie au marché</button><button class="btn" id="b-balade">Balade sur le sentier</button><button class="btn ${nbConcours ? 'or' : ''}" id="b-concours" ${nbConcours ? '' : 'disabled'}>Concours${nbConcours ? ` (${nbConcours})` : ' : jours 13 et 14'}</button></div>
+    <div class="boutons" style="margin-top:14px"><button class="btn or" id="b-cours">Cours au manège couvert</button><button class="btn" id="b-carriere">Cours en carrière</button><button class="btn" id="b-dressage-cours">Cours de dressage au carré</button><button class="btn" id="b-marche">Sortie au marché</button><button class="btn" id="b-balade">Balade sur le sentier</button><button class="btn ${nbConcours ? 'or' : ''}" id="b-concours" ${nbConcours ? '' : 'disabled'}>Concours${nbConcours ? ` (${nbConcours})` : ' : jours 13 et 14'}</button></div>
     <p class="note" id="choix-msg"></p>`);
   const choisis = () => [...$('#contenu').querySelectorAll('input[data-i]')].filter(x => x.checked).map(x => dispo[+x.dataset.i]);
   const valider = f => { const l = choisis(); if (!l.length) { $('#choix-msg').textContent = 'Coche au moins un cavalier.'; return; } if (l.length > 5) { $('#choix-msg').textContent = 'Cinq cavaliers au plus.'; return; } f(l); };
   $('#b-cours').onclick = () => valider(commencerLecon);
   $('#b-carriere').onclick = () => valider(l => commencerBalade(l, 'carriere'));
+  $('#b-dressage-cours').onclick = () => valider(l => commencerBalade(l, 'dressage'));
   $('#b-balade').onclick = () => valider(commencerBalade);
   $('#b-marche').onclick = () => valider(l => commencerBalade(l, 'marche'));
   $('#b-concours').onclick = () => valider(l => { const c = l.filter(peutConcourir); if (!c.length) { $('#choix-msg').textContent = 'Aucun enfant coché n’est en jour de concours (les deux derniers jours de son stage).'; return; } lancerConcours(c.map(entreeEnfant), { type: 'enfants' }); });
@@ -5681,12 +5756,13 @@ function commencerBalade(liste, type = 'balade') {
   const groupe = liste.map((e, k) => {
     const tenue = tenueStagiaire(e.s), m = modeleCheval(e.s.cheval, true, tenue); scene.add(m.g);
     e.etat = 'balade'; e.p.g.visible = false;
-    return { e, s: e.s, cheval: e.s.cheval, m, tenue, k, x: J.x, z: J.z, y: 0, rot: J.rot, vit: 0, px: J.x, pz: J.z, sauts: 0, peurs: 0, satisf: 70 };
+    return { e, s: e.s, cheval: e.s.cheval, m, tenue, k, x: J.x, z: J.z, y: 0, rot: J.rot, vit: 0, px: J.x, pz: J.z, sauts: 0, peurs: 0, satisf: 70, notes: [] };
   });
   balade = { type, groupe, trace, bornes: new Set(), avis: 0, t: 0, entre: false, dehors: 0 };
   construireChevauxStage(); majBalade(0.016);
   const noms = groupe.map(R => R.e.nom).join(', ');
   if (type === 'marche') toast(`Sortie au marché avec ${noms} : prends la route vers l’est, puis le sud, jusqu’au marché du village ; ramène-les ensuite au ranch`, 'or');
+  else if (type === 'dressage') toast(`Cours de dressage avec ${noms} : emmène-les au carré de dressage, à l’ouest. Choisis tes figures au panneau (E) : ils les font derrière toi et Inès les note. Éloigne-toi du carré pour finir`, 'or');
   else if (type === 'carriere') toast(`Cours en carrière avec ${noms} : emmène-les à la carrière, à l’est, et saute. Ils sautent là où tu sautes. Sors de la carrière pour finir`, 'or');
   else toast(`En balade avec ${noms} : suis le sentier du lac, au nord-ouest, et passe par les ${BORNES.length} bornes`, 'or');
 }
@@ -5718,6 +5794,12 @@ function majBalade(dt) {
     const M = MARCHE, auMarche = J.x > M.x1 - 4 && J.x < M.x2 + 4 && J.z > M.z1 - 8 && J.z < M.z2 + 4;
     if (!B.auMarche && auMarche) { B.auMarche = true; son(660, 0.15, 'triangle', 0.05); toast(`Au marché ! ${B.groupe.map(R => R.e.nom).join(', ')} achètent des friandises pour leurs chevaux. Ramène-les ensuite au ranch`, 'or'); }
     if (B.auMarche && Math.hypot(J.x - 14, J.z - 28) < 32) finirBalade(true);
+  }
+  if (B.type === 'dressage') { // fini quand on s'éloigne du carré (le panneau est juste devant l'entrée)
+    const C = CARRE, loin = J.x < C.x1 - 10 || J.x > C.x2 + 10 || J.z < C.z1 - 10 || J.z > C.z2 + 12;
+    if (!loin) { if (J.x > C.x1 && J.x < C.x2 && J.z > C.z1 && J.z < C.z2) B.entre = true; B.dehors = 0; }
+    else if (B.entre && (B.dehors += dt) > 3) finirBalade(true);
+    if (B.t > 420) finirBalade(true);
   }
   if (B.type === 'carriere') {
     if (estEnCarriere(J.x, J.z)) { B.entre = true; B.dehors = 0; }
@@ -5757,14 +5839,25 @@ function majBornes() {
     }
   });
 }
+function noterGroupe(note, F) { // pendant un cours de dressage : chaque enfant a fait la figure derrière toi
+  const res = balade.groupe.map(R => {
+    const n = Math.round(clamp(note * 0.5 + (R.e.niveau || 1) * 0.15 + (R.cheval.stats.dressage?.niv ?? 2) * 0.35 + rand(-0.8, 0.8), 1, 10) * 10) / 10;
+    R.notes.push(n); R.satisf = clamp(R.satisf + (n >= 6 ? 6 : -4), 0, 100); gagnerXp(R.cheval, 'dressage', 3); return `${R.e.nom} ${fr(n, 1)}`;
+  });
+  setTimeout(() => toast(`${F.nom}, les enfants : ${res.join(' · ')}`, 'or'), 1200);
+}
 function finirBalade(reussie) {
   const B = balade; if (!B) return;
-  const carriere = B.type === 'carriere';
+  const carriere = B.type === 'carriere' || B.type === 'dressage', dressage = B.type === 'dressage';
   let total = 0; const lignes = [];
   for (const R of B.groupe) {
     const e = R.e, s = R.s;
     scene.remove(R.m.g); const bp = BOX_PORTE(s.box); retourAuBanc(e, bp.x, bp.z - 1); // il desselle son cheval au box, puis revient
-    if (carriere) {
+    if (dressage) {
+      const gain = 10 + 10 * R.notes.length, moy = R.notes.length ? R.notes.reduce((a, b) => a + b, 0) / R.notes.length : 0; total += gain; s.lecons++; s.dernier = etat.jour; ficheEleve(e.nom).lecons++;
+      s.humeur = clamp(s.humeur + (R.satisf - 50) * 0.4 + 8, 0, 100);
+      lignes.push(`<div><span>${e.nom} · ${R.notes.length} figure${R.notes.length > 1 ? 's' : ''}${R.notes.length ? `, moyenne ${fr(moy, 1)}/10` : ''}</span><b>${gain} pièces</b></div>`);
+    } else if (carriere) {
       const gain = 10 + 8 * R.sauts; total += gain; s.lecons++; s.dernier = etat.jour; ficheEleve(e.nom).lecons++;
       s.humeur = clamp(s.humeur + (R.satisf - 50) * 0.4 + 8, 0, 100);
       lignes.push(`<div><span>${e.nom} · ${R.sauts} saut${R.sauts > 1 ? 's' : ''}${R.peurs ? `, ${R.peurs} peur${R.peurs > 1 ? 's' : ''}` : ''}</span><b>${gain} pièces</b></div>`);
@@ -5775,12 +5868,12 @@ function finirBalade(reussie) {
   }
   balade = null; construireChevauxStage();
   if (!reussie && !carriere) { toast('Balade interrompue : les enfants rentrent à pied, un peu déçus', 'rouge'); sauver(); return; }
-  etat.pieces += total; const c = chevalActif(); gagnerXp(c, 'endurance', 5); gagnerXp(c, carriere ? 'saut' : 'lien', 2);
+  etat.pieces += total; const c = chevalActif(); gagnerXp(c, 'endurance', 5); gagnerXp(c, dressage ? 'dressage' : carriere ? 'saut' : 'lien', 2);
   if (carriere) etat.compteurs.lecons++;
   sonPiece(); sauver();
-  ouvrir(`<div class="pnj">${carriere ? 'Cours en carrière' : B.type === 'marche' ? 'Sortie au marché' : 'Balade'} terminé${carriere ? '' : 'e'} · jour ${etat.jour}</div><h2>${carriere ? `${total} pièces gagnées` : B.type === 'marche' ? 'Sortie au marché réussie' : 'Tour du sentier du lac réussi'}</h2>
+  ouvrir(`<div class="pnj">${dressage ? 'Cours de dressage' : carriere ? 'Cours en carrière' : B.type === 'marche' ? 'Sortie au marché' : 'Balade'} terminé${carriere ? '' : 'e'} · jour ${etat.jour}</div><h2>${carriere ? `${total} pièces gagnées` : B.type === 'marche' ? 'Sortie au marché réussie' : 'Tour du sentier du lac réussi'}</h2>
     <div class="aide-grille">${lignes.join('')}</div>
-    <p>${carriere ? 'Chaque saut réussi rapporte 8 pièces. Un obstacle plus haut que ce que l’enfant sait sauter lui fait peur : règle les hauteurs au tableau du matériel selon le niveau du groupe.' : B.type === 'marche' ? `Ils ont dépensé leur argent de poche en carottes et en pommes pour leurs chevaux, et te paient la sortie : ${total} pièces.` : `${total} pièces gagnées. ${c.nom} gagne en endurance et en lien.`} La sortie compte pour aujourd’hui : demain, chacun aura gagné un niveau. Ils dessellent leur cheval au box, puis reviennent au banc.</p>
+    <p>${dressage ? 'Chaque figure faite avec toi rapporte 10 pièces par enfant ; un enfant bien noté est content, et son cheval progresse en dressage.' : carriere ? 'Chaque saut réussi rapporte 8 pièces. Un obstacle plus haut que ce que l’enfant sait sauter lui fait peur : règle les hauteurs au tableau du matériel selon le niveau du groupe.' : B.type === 'marche' ? `Ils ont dépensé leur argent de poche en carottes et en pommes pour leurs chevaux, et te paient la sortie : ${total} pièces.` : `${total} pièces gagnées. ${c.nom} gagne en endurance et en lien.`} La sortie compte pour aujourd’hui : demain, chacun aura gagné un niveau. Ils dessellent leur cheval au box, puis reviennent au banc.</p>
     <button class="btn or gros" id="ok">Parfait</button>`);
   $('#ok').onclick = fermer;
 }
@@ -6731,6 +6824,7 @@ function majMonde(dt, t) {
   majPalefreniers(dt);
   majCordes();
   majDressageCarre(dt);
+  majConcoursDressage(dt);
   majVente(dt);
   for (const r of residents) {
     if (r.box) { r.t += dt; vieBox(r, r.cheval.box, dt); continue; }
@@ -6889,7 +6983,8 @@ function majHud(dt) {
   else if (concours) { ch.hidden = false; const K = concours.cav; ch.innerHTML = concours.attenteJoueur ? `Concours · à toi !<small>${etat.aPied ? 'monte à cheval, puis ' : ''}va au départ du parcours et appuie sur E</small>` : K ? `Concours · ${K.F.nom} · ${fr(K.t)} s<small>${K.F.fautes} faute${K.F.fautes > 1 ? 's' : ''} · concurrent ${concours.i + 1} sur ${concours.file.length} · V : caméra</small>` : `Concours<small>prochain concurrent… · V : caméra</small>`; }
   else if (balade?.type === 'marche') { ch.hidden = false; ch.innerHTML = `Sortie au marché<small>${balade.auMarche ? 'ramène les enfants au ranch' : 'la route vers l’est, puis le sud'} · descendre arrête la sortie</small>`; }
   else if (balade?.type === 'carriere') { ch.hidden = false; const n = balade.groupe.reduce((t, R) => t + R.sauts, 0); ch.innerHTML = `Cours en carrière · ${n} saut${n > 1 ? 's' : ''}<small>${balade.entre ? 'saute, ils te suivent · sors de la carrière pour finir' : 'emmène le groupe à la carrière, à l’est'}</small>`; }
-  else if (dressageCarre) { const D = dressageCarre, F = FIGURES[D.figs[D.f]], v = Math.abs(J.vit), ok = F.allure === 'galop' ? v >= 8 : v > 2.5 && v < 8.5; ch.hidden = false; ch.innerHTML = `Dressage · ${F.nom}${D.reprise ? ` (${D.f + 1}/${D.figs.length})` : ''}<small>repère ${Math.min(D.i + 1, F.pts.length)} sur ${F.pts.length} · ${F.pts[D.i]?.arret ? 'arrête-toi sur le grand rond' : `au ${F.allure} : ${ok ? 'bonne allure' : 'mauvaise allure'}`}</small>`; }
+  else if (dressageCarre) { const D = dressageCarre, F = D.jeu[D.figs[D.f]], v = Math.abs(J.vit), ok = F.allure === 'galop' ? v >= 8 : v > 2.5 && v < 8.5; ch.hidden = false; ch.innerHTML = `Dressage · ${F.nom}${D.reprise ? ` (${D.f + 1}/${D.figs.length})` : ''}<small>repère ${Math.min(D.i + 1, F.pts.length)} sur ${F.pts.length} · ${F.pts[D.i]?.arret ? 'arrête-toi sur le grand rond' : `au ${F.allure} : ${ok ? 'bonne allure' : 'mauvaise allure'}`}</small>`; }
+  else if (concoursDr) { const C = concoursDr, K = C.cav; ch.hidden = false; ch.innerHTML = `Concours de dressage · ${C.nomLieu}<small>${K && !K.joueur ? `${K.F.nom} fait sa reprise` : C.attente ? 'à toi : ta reprise' : 'prochain concurrent…'} · ${C.i + 1} sur ${C.file.length}</small>`; }
   else if (enchere) { ch.hidden = false; ch.innerHTML = `Enchères · ${enchere.c.nom} · ${enchere.prix} pièces<small>${enchere.leader ? `meilleure offre : ${enchere.leader.nom}` : 'en attente d’une première offre'}${enchere.phase === 'compte' ? ` · ${['', 'une fois…', 'deux fois…'][enchere.compte] || ''}` : enchere.phase === 'decision' ? ' · à toi de décider' : ''}</small>`; }
   else if (balade) { ch.hidden = false; ch.innerHTML = `Balade · bornes ${balade.bornes.size} sur ${BORNES.length}<small>${balade.groupe.map(R => R.e.nom).join(', ')} te ${balade.groupe.length > 1 ? 'suivent' : 'suit'} · descendre arrête la balade</small>`; }
   else ch.hidden = true;
@@ -6964,7 +7059,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
