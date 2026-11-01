@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 19:46";</script>
+<script>window.VERSION_JEU = "2026-11-01 19:50";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -1978,11 +1978,9 @@ function finirConcoursDressage() {
   const frais = C.type === 'ouvert' ? 40 * C.file.filter(F => F.type === 'visiteur').length : 0;
   etat.pieces += total + frais; etat.compteurs.concoursDressage = (etat.compteurs.concoursDressage || 0) + 1; construireChevauxStage(); sonPiece(); sauver();
   if (C.type === 'ouvert') setTimeout(retirerVisiteurs, 4000);
-  if (C.type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; }
-  ouvrir(`<div class="pnj">Concours de dressage · ${C.nomLieu}${C.type === 'club' ? ' · retour au ranch en van' : ''} · jour ${etat.jour}</div><h2>${cl[0].type === 'joueur' ? 'Tu gagnes le concours de dressage !' : `Victoire de ${cl[0].nom} !`}</h2>
-    <div class="aide-grille">${lignes.join('')}</div><p>${frais ? `Engagements des invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement à la note de la reprise, sur 10.</p>
-    <button class="btn or gros" id="ok">Bravo à tous</button>`);
-  $('#ok').onclick = fermer;
+  podiumEtPrix(cl, { x: (C.carre.x1 + C.carre.x2) / 2, z: (C.carre.z1 + C.carre.z2) / 2 + 6, rot: 0 }, 'dressage', `<div class="pnj">Concours de dressage · ${C.nomLieu}${C.type === 'club' ? ' · retour au ranch en van' : ''} · jour ${etat.jour}</div><h2>${cl[0].type === 'joueur' ? 'Tu gagnes le concours de dressage !' : `Victoire de ${cl[0].nom} !`}</h2>
+    <div class="aide-grille">${lignes.join('')}</div><p>${frais ? `Engagements des invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement à la note de la reprise, sur 10.</p>`,
+    () => { if (C.type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; } });
 }
 // ---- Invitations aux concours (2026-11-01) : elles arrivent au fil des jours, pour toi et pour tes élèves. Tu demandes à
 // chaque enfant s'il veut venir (il répond selon son niveau, son humeur, ce qu'il aime), puis, le jour venu, vous partez
@@ -4699,7 +4697,7 @@ function toast(t, genre = '') {
 }
 let mini = null;
 function ouvrir(html, mode = '', vue = null) { vueAtelier = vue === 'atelier'; vueCarriere = vue === 'carriere'; vueBatir = vue === 'batir'; if (!vueBatir) modeBatir = null; document.body.classList.toggle('atelier', mode === 'lateral'); $('#voile').className = mode; $('#contenu').innerHTML = html; $('#voile').hidden = false; for (const k in touches) touches[k] = false; }
-function fermer() { if (posteActif) finirPoste(); if (repereObst) repereObst.visible = false; selObst = null; $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
+function fermer() { if (posteActif) finirPoste(); if (podiumG && !$('#voile').hidden) setTimeout(() => { if ($('#voile').hidden && podiumG) retirerPodium(); }, 0); if (repereObst) repereObst.visible = false; selObst = null; $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
 const ouvert = () => !$('#voile').hidden;
 $('#fermer').onclick = fermer;
 $('#voile').addEventListener('pointerdown', e => { if (e.target.id === 'voile' && !mini) fermer(); });
@@ -4800,7 +4798,8 @@ function ecurie() {
         <button class="btn" data-nourrir="pomme" data-id="${c.id}" ${etat.pommes ? '' : 'disabled'}>Pomme (${etat.pommes})</button>
       </div></article>`;
   }).join('');
-  ouvrir(`<div class="pnj">Ton écurie · ${etat.chevaux.length} ${etat.chevaux.length > 1 ? 'chevaux' : 'cheval'}</div><h2>Tes chevaux</h2>
+  const md = etat.medailles || { or: 0, argent: 0, bronze: 0 };
+  ouvrir(`<div class="pnj">Ton écurie · ${etat.chevaux.length} ${etat.chevaux.length > 1 ? 'chevaux' : 'cheval'}${md.or + md.argent + md.bronze ? ` · médailles : ${md.or} or, ${md.argent} argent, ${md.bronze} bronze` : ''}</div><h2>Tes chevaux</h2>
     <p>Choisis le cheval que tu montes. Les autres sont au box, au pré ou en liberté là où tu les as laissés ; pense à leur faim et à leur soif. Une friandise renforce le lien, et un cheval qui a confiance refuse moins les obstacles.</p>
     <h3 class="section">Palefreniers · ${SALAIRE} pièces par jour chacun</h3>
     <p class="note">De 7 h à 19 h, ils donnent foin et eau, brossent, mettent les couvertures quand il pleut et s’occupent des poulains. Payés chaque nuit.</p>
@@ -5997,13 +5996,74 @@ function finirConcours() {
   const type = C.type;
   concours = null; vueConcours = false; camPrete = false; remettreBarres(); construireChevauxStage(); sonPiece(); sauver();
   if (type === 'ouvert') setTimeout(retirerVisiteurs, 4000);
-  if (type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; } // le van vous ramène au ranch
-  ouvrir(`<div class="pnj">${type === 'regional' ? `Concours régional · ${CLASSES[C.classe].nom} ${fr(CLASSES[C.classe].h, 2)} m` : type === 'ouvert' ? 'Concours ouvert du ranch' : type === 'club' ? `Concours · ${C.nomLieu || 'club'} · retour au ranch en van` : 'Concours du ranch'} · jour ${etat.jour}</div><h2>${titre}</h2>
+  const zone = TERRAINS[C.terrain || 'carriere'].zone, site = C.terrain === 'carriere' || !C.terrain ? { x: 52, z: 10, rot: 0 } : sitePodium(zone);
+  podiumEtPrix(cl, site, 'saut', `<div class="pnj">${type === 'regional' ? `Concours régional · ${CLASSES[C.classe].nom} ${fr(CLASSES[C.classe].h, 2)} m` : type === 'ouvert' ? 'Concours ouvert du ranch' : type === 'club' ? `Concours · ${C.nomLieu || 'club'} · retour au ranch en van` : 'Concours du ranch'} · jour ${etat.jour}</div><h2>${titre}</h2>
     <div class="aide-grille">${lignes.join('')}</div>
-    <p>${type === 'ouvert' ? `Droits d’engagement des ranchs invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement aux fautes (4 s chacune), puis au temps.</p>
-    <button class="btn or gros" id="ok">Bravo à tous</button>`);
-  $('#ok').onclick = fermer;
+    <p>${type === 'ouvert' ? `Droits d’engagement des ranchs invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement aux fautes (4 s chacune), puis au temps.</p>`,
+    () => { if (type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; } }); // le van vous ramène au ranch
 }
+// ---- Podium et prix (2026-11-01) : à la fin de chaque concours, les trois premiers montent sur le podium, médaille au cou.
+// Si c'est toi : 1er = un cheval déjà débourré + une médaille d'or + une selle neuve ; 2e = une selle, un tapis et un licol
+// (+ médaille d'argent) ; 3e = un licol et une couverture (+ médaille de bronze). Ce que tu as déjà est remplacé par des pièces.
+let podiumG = null, camPodium = null, podiumPersos = [];
+const COULEURS_MEDAILLES = [0xf3c13a, 0xc9ced3, 0xc07a3e], NOMS_MEDAILLES = ['d’or', 'd’argent', 'de bronze'];
+function construirePodium(top, site) {
+  if (podiumG) scene.remove(podiumG);
+  podiumG = new THREE.Group(); podiumG.position.set(site.x, 0, site.z); podiumG.rotation.y = site.rot || 0; scene.add(podiumG); podiumPersos = [];
+  const marches = [[0, 1.0], [-1.5, 0.7], [1.5, 0.45]]; // 1er au milieu, 2e à gauche, 3e à droite
+  marches.forEach(([x, h], r) => {
+    bloc(1.4, h, 1.2, robeMat([0xf6f3ec, 0xe9e4da, 0xddd6c8][r], 0.6), x, h / 2, 0, podiumG);
+    const n = etiquette(`${r + 1}`, '#2f1f13', `#${new THREE.Color(COULEURS_MEDAILLES[r]).getHexString()}`, 0.5); n.position.set(x, h / 2, 0.65); podiumG.add(n);
+    const F = top[r]; if (!F) return;
+    const t = F.tenue || etat.tenue || {}, p = pieton(`${F.nom}${F.type === 'visiteur' ? ` · ${F.ranch}` : ''}`, t.veste ?? 0xc0392b, t.cheveux ?? 0x6b4426, F.genre || t.genre || (F.type === 'joueur' ? (etat.tenue?.genre || 'f') : 'm'));
+    if (F.type === 'enfant') p.g.scale.setScalar(0.82);
+    p.g.position.set(x, h, 0); podiumG.add(p.g); podiumPersos.push(p);
+    const med = new THREE.Group(); med.position.set(x, h + (F.type === 'enfant' ? 1.05 : 1.25), 0.2); podiumG.add(med);
+    maille(cylGeo(0.07, 0.07, 0.02, 16), new THREE.MeshStandardMaterial({ color: COULEURS_MEDAILLES[r], metalness: 0.9, roughness: 0.25 }), 0, 0, 0, med).rotation.x = Math.PI / 2;
+    bloc(0.04, 0.22, 0.01, robeMat([0x2f6fb5, 0xc0392b, 0x2f9e5a][r], 0.7), 0, 0.12, -0.01, med);
+  });
+  const ban = etiquette('Podium', '#fbf1dc', 'rgba(125,79,176,.95)', 0.8); ban.position.set(0, 3.4, 0); podiumG.add(ban);
+  const r0 = site.rot || 0, vx = Math.sin(r0), vz = Math.cos(r0); // la caméra regarde le podium de face
+  const dx = Math.cos(r0) * 2.6, dz = -Math.sin(r0) * 2.6; // visée décalée à droite : le podium reste à gauche du panneau
+  camPodium = { pos: new THREE.Vector3(site.x + vx * 8 + dx * 0.6, 3.2, site.z + vz * 8 + dz * 0.6), vise: new THREE.Vector3(site.x + dx, 1.4, site.z + dz) };
+}
+function retirerPodium() { if (podiumG) { scene.remove(podiumG); podiumG = null; } podiumPersos = []; camPodium = null; camPrete = false; }
+function chevalDePrix(discipline) { // un cheval déjà débourré, de 4 à 6 ans, un peu meilleur que ceux de Basile
+  const races = Object.entries(RACES).filter(([, R]) => R.prix && (discipline === 'dressage' ? R.specialite === 'dressage' : R.specialite === 'saut' || R.base?.saut >= 4));
+  const [race, R] = pick(races.length ? races : Object.entries(RACES).filter(([, R]) => R.prix));
+  const base = Object.fromEntries(STATS.map(([k]) => [k, Math.min(10, (R.base?.[k] || 2) + 1)]));
+  const c = nouveauCheval(nomLibre(), race, R.robe, base, R.taille || 1); c.crin = R.crin ?? null; c.age0 = 4 + Math.floor(Math.random() * 3); c.jourAge0 = etat.jour; c.lieu = 'box';
+  etat.chevaux.push(c); return c;
+}
+function donnerPrix(rang, discipline) { // les prix du joueur ; ce qu'il possède déjà est remplacé par des pièces
+  const gains = [], pieces = n => { etat.pieces += n; return `${n} pièces`; };
+  const selle = () => { const k = Object.keys(SELLES).find(k => SELLES[k].prix && !etat.selles.includes(k)); if (k) { etat.selles.push(k); construireSellerie(); return SELLES[k].nom; } return pieces(120); };
+  const tapis = () => { etat.tapis ||= ['uni']; const k = Object.keys(TAPIS).find(k => TAPIS[k].prix && !etat.tapis.includes(k)); if (k) { etat.tapis.push(k); return `tapis ${TAPIS[k].nom.toLowerCase()}`; } return pieces(40); };
+  const licol = () => { const k = Object.keys(LICOLS).find(k => LICOLS[k].prix && !mesLicols().includes(k)); if (k) { mesLicols().push(k); return `licol ${LICOLS[k].nom.toLowerCase()}`; } return pieces(20); };
+  const couv = () => { const k = Object.keys(COUVERTURES).find(k => COUVERTURES[k].prix && !mesCouvertures().includes(k)); if (k) { mesCouvertures().push(k); return `couverture ${COUVERTURES[k].nom.toLowerCase()}`; } return pieces(50); };
+  const m = etat.medailles ||= { or: 0, argent: 0, bronze: 0 }; m[['or', 'argent', 'bronze'][rang]]++;
+  gains.push(`une médaille ${NOMS_MEDAILLES[rang]}`);
+  if (rang === 0) { const c = chevalDePrix(discipline); gains.push(`un cheval déjà débourré : ${c.nom} (${c.race}, ${ageTexte(c)})`); gains.push(selle()); }
+  if (rang === 1) { gains.push(selle()); gains.push(tapis()); gains.push(licol()); }
+  if (rang === 2) { gains.push(licol()); gains.push(couv()); }
+  majResidents(); return gains;
+}
+// fin d'un concours (saut ou dressage) : podium, prix du joueur, médailles des enfants, puis « Bravo à tous »
+function podiumEtPrix(cl, site, discipline, enTete, apres) {
+  const top = cl.slice(0, 3);
+  construirePodium(top, site);
+  const lignesPrix = [];
+  top.forEach((F, r) => {
+    if (F.type === 'joueur' && !F.abandon) lignesPrix.push(`<p><b>Tu es ${r + 1}${r ? 'e' : 'er'} : </b>${donnerPrix(r, discipline).join(', ')}.</p>`);
+    if (F.type === 'enfant') { F.s.medailles = (F.s.medailles || 0) + 1; lignesPrix.push(`<p><b>${F.nom}</b> remporte la médaille ${NOMS_MEDAILLES[r]} !</p>`); }
+  });
+  sonPiece(); sauver();
+  ouvrir(`${enTete}${lignesPrix.length ? `<h3 class="section">Le podium</h3>${lignesPrix.join('')}` : '<p class="note">Personne de ton ranch sur le podium cette fois.</p>'}
+    <p class="note">1er : un cheval déjà débourré, une médaille d’or et une selle neuve · 2e : une selle, un tapis et un licol · 3e : un licol et une couverture.</p>
+    <button class="btn or gros" id="ok">Bravo à tous</button>`, 'lateral');
+  $('#ok').onclick = () => { fermer(); retirerPodium(); apres?.(); };
+}
+const sitePodium = (zone, k = 0.75) => ({ x: (zone.x1 + zone.x2) / 2, z: zone.z1 + (zone.z2 - zone.z1) * k, rot: 0 });
 // ---- Concours ouvert chez toi : les ranchs voisins arrivent en van et se garent à l'est de la carrière
 let visiteursDecor = [];
 function retirerVisiteurs() { visiteursDecor.forEach(o => scene.remove(o)); visiteursDecor = []; }
@@ -6823,6 +6883,7 @@ function majMonde(dt, t) {
   }
   majPalefreniers(dt);
   majCordes();
+  for (const p of podiumPersos) marcher(p, 0, dt); // les gagnants sur le podium, au repos (sinon bras en croix)
   majDressageCarre(dt);
   majConcoursDressage(dt);
   majVente(dt);
@@ -6874,6 +6935,7 @@ function majMonde(dt, t) {
 const camPos = new THREE.Vector3(), regard = new THREE.Vector3();
 var camPrete = false;
 function majCamera(dt) {
+  if (camPodium) { camera.position.copy(camPodium.pos); camera.lookAt(camPodium.vise); majLumiere(camPodium.vise.x, camPodium.vise.z); return; }
   if (window.ranch?.camFixe) { camera.position.copy(window.ranch.camFixe.pos); camera.lookAt(window.ranch.camFixe.vise); majLumiere(window.ranch.camFixe.vise.x, window.ranch.camFixe.vise.z); return; }
   const dedansBat = majToits();
   if (dedansBat && !vueBatir && !vueCarriere && !etat.conduite && !(concours?.cav && vueConcours)) { // dedans : on voit d'en haut, toit et étage effacés
@@ -7059,7 +7121,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { podiumEtPrix, get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
