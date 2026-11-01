@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 11:56";</script>
+<script>window.VERSION_JEU = "2026-11-01 12:06";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -248,7 +248,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   <div id="enchere-choix" class="carton" hidden>
     <div class="lecon-tete"><b id="ec-titre">Enchères</b><span id="ec-prix"></span></div>
     <small id="ec-texte"></small>
-    <div class="ordres"><button type="button" id="ec-oui">Oui, je vends</button><button type="button" id="ec-non">Non, je le garde</button></div>
+    <div class="ordres"><button type="button" id="ec-oui">Oui, je vends</button><button type="button" id="ec-non">Non, je le garde</button><button type="button" id="ec-obst">Obstacles</button></div>
   </div>
   <div id="longe" class="carton" hidden>
     <div class="lecon-tete"><b id="lg-titre">Longe</b><span id="lg-temps"></span></div>
@@ -1593,6 +1593,9 @@ let acheteurs = [], gaspard = null;
   bloc(2.4, 0.5, 2.2, MAT.bois, V.x - 10, 0.25, V.z, g); bloc(0.9, 1.1, 0.5, MAT.peint, V.x - 9.3, 1.05, V.z, g); bloc(1.0, 0.06, 0.6, MAT.bois, V.x - 9.3, 1.63, V.z, g);
   fusionner(g); fusionner(toit);
   const lab = etiquette('Ventes aux enchères', '#2f1f13', '#f3b52d', 1.0); lab.position.set(V.x, 4.4, V.z - 6); scene.add(lab);
+  { const t = new THREE.Group(); t.position.set(V.x + 4, 0, V.z + 6.4); scene.add(t); // tableau des obstacles, au bord sud de la piste
+    for (const s of [-0.6, 0.6]) maille(cylGeo(0.05, 0.06, 1.6, 8), MAT.bois, s, 0.8, 0, t); bloc(1.5, 0.9, 0.08, MAT.peint, 0, 1.3, 0, t);
+    const l = etiquette('Obstacles', '#fbf1dc', 'rgba(47,94,58,.95)', 0.55); l.position.set(0, 2.1, 0); t.add(l); }
 }
 function construireVente() {
   for (const a of acheteurs) scene.remove(a.p.g);
@@ -3452,23 +3455,31 @@ function panneauVente() {
   const fiches = dispo.map(c => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span><div><h3>${c.nom}</h3><small>${c.race} · ${sexeTexte(c)}${poulain(c) ? ' · poulain' : ''}${c.elevage ? ` · élevage ${c.elevage} %` : ''}</small></div></div>
     ${blocStats(c.stats, false)}<p class="note" style="margin:4px 0">Valeur estimée : <b>${prixVente(c)} pièces</b></p>
     <div class="boutons">${[['basse', 'Mise à prix basse'], ['normale', 'Normale'], ['haute', 'Haute']].map(([k, l]) => `<button class="btn ${k === 'normale' ? 'or' : ''}" data-vendre="${c.id}" data-mise="${k}">${l} · ${Math.round(prixVente(c) * { basse: 0.5, normale: 0.7, haute: 0.95 }[k] / 5) * 5} p.</button>`).join('')}</div></article>`).join('');
-  const rv = ringVente();
-  const lignesRing = rv.obstacles.map((ob, i) => `<div class="reglage"><b>${i + 1}</b><div class="choix-ligne">${['croisillon', 'vertical', 'oxer'].map(k => `<button class="choix petit ${ob.type === k ? 'choisi' : ''}" data-ri="${i}" data-rtype="${k}">${TYPES_OBST[k]}</button>`).join('')}</div>
-    <div class="hauteur"><button class="btn" data-ri="${i}" data-rdh="-1" ${ob.h <= 0.31 ? 'disabled' : ''}>−</button><span>${fr(ob.h, 1)} m</span><button class="btn" data-ri="${i}" data-rdh="1" ${ob.h >= 1.39 ? 'disabled' : ''}>+</button></div></div>`).join('');
-  const blocRing = `<h3 class="section">Démonstration au saut sur la piste</h3>
-    <p class="note">Pendant la vente, le cheval passe au trot et saute ces obstacles. Un beau saut donne envie aux acheteurs de payer plus ; trop haut pour lui, il fait tomber la barre et les prix baissent un peu. Hauteur que ce cheval saute bien : environ 0,7 m + 0,16 m par niveau de Saut.</p>
-    ${lignesRing}<div class="choix-ligne">${rv.obstacles.length < 3 ? '<button class="choix" id="ring-ajout">Ajouter un obstacle</button>' : ''}${rv.obstacles.length ? '<button class="choix" id="ring-retire">Retirer le dernier</button>' : ''}</div>`;
   ouvrir(`<div class="pnj">Maître Gaspard · commissaire-priseur</div><h2>Vendre aux enchères</h2>
     <p>Choisis le cheval et sa mise à prix. Plus elle est haute, moins il y aura d’acheteurs ; trop haute, il peut ne pas trouver preneur. Les acheteurs paient plus cher un cheval bien dressé et bien élevé.</p>
-    ${blocRing}
+    <div class="boutons"><button class="btn or gros" id="vers-obst">Obstacles de la piste (${ringVente().obstacles.length})</button></div>
     <h3 class="section">Le cheval à vendre</h3>
     ${etat.chevaux.length < 2 ? '<p class="note">Il te faut au moins deux chevaux pour en vendre un.</p>' : `<div class="grille">${fiches}</div>`}`);
-  const refaire = () => { construireRing(); sauver(); const d = $('#panneau').scrollTop; panneauVente(); $('#panneau').scrollTop = d; };
+  $('#vers-obst').onclick = () => panneauObstaclesVente();
+  $('#contenu').querySelectorAll('[data-vendre]').forEach(b => b.onclick = () => lancerEnchere(etat.chevaux.find(c => c.id === b.dataset.vendre), b.dataset.mise));
+}
+// obstacles de la piste des ventes : bouton du panneau de Gaspard, panneau « Obstacles » au bord de la piste, et bouton
+// pendant la vente (on peut les changer en pleine vente)
+function panneauObstaclesVente() {
+  if (ouvert()) fermer();
+  const rv = ringVente();
+  const lignes = rv.obstacles.map((ob, i) => `<div class="reglage"><b>${i + 1}</b><div class="choix-ligne">${['croisillon', 'vertical', 'oxer'].map(k => `<button class="choix petit ${ob.type === k ? 'choisi' : ''}" data-ri="${i}" data-rtype="${k}">${TYPES_OBST[k]}</button>`).join('')}</div>
+    <div class="hauteur"><button class="btn" data-ri="${i}" data-rdh="-1" ${ob.h <= 0.31 ? 'disabled' : ''}>−</button><span>${fr(ob.h, 1)} m</span><button class="btn" data-ri="${i}" data-rdh="1" ${ob.h >= 1.39 ? 'disabled' : ''}>+</button><button class="choix petit" data-rretire="${i}">Retirer</button></div></div>`).join('');
+  ouvrir(`<div class="pnj">Ventes aux enchères · piste</div><h2>Obstacles de la piste</h2>
+    <p>Pendant la vente, le cheval passe au trot et saute ces obstacles tout seul. Un beau saut donne envie aux acheteurs de payer plus ; trop haut pour lui, il fait tomber la barre et les prix baissent un peu. Un cheval saute bien environ 0,7 m, plus 0,16 m par niveau de Saut.</p>
+    ${lignes || '<p class="note">Aucun obstacle : le cheval fait le tour au pas.</p>'}
+    <div class="boutons">${rv.obstacles.length < 3 ? '<button class="btn or" id="ring-ajout">Ajouter un obstacle</button>' : ''}${enchere ? '' : '<button class="btn" id="ring-vente">Retour à la vente</button>'}</div>`);
+  const refaire = () => { construireRing(); sauver(); panneauObstaclesVente(); };
   $('#contenu').querySelectorAll('[data-rtype]').forEach(b => b.onclick = () => { rv.obstacles[+b.dataset.ri].type = b.dataset.rtype; refaire(); });
   $('#contenu').querySelectorAll('[data-rdh]').forEach(b => b.onclick = () => { const ob = rv.obstacles[+b.dataset.ri]; ob.h = clamp(Math.round(ob.h * 10 + +b.dataset.rdh) / 10, 0.3, 1.4); refaire(); });
+  $('#contenu').querySelectorAll('[data-rretire]').forEach(b => b.onclick = () => { rv.obstacles.splice(+b.dataset.rretire, 1); refaire(); });
   const ra = $('#ring-ajout'); if (ra) ra.onclick = () => { rv.obstacles.push({ type: rv.obstacles.length ? 'vertical' : 'croisillon', h: 0.6 }); refaire(); };
-  const rr = $('#ring-retire'); if (rr) rr.onclick = () => { rv.obstacles.pop(); refaire(); };
-  $('#contenu').querySelectorAll('[data-vendre]').forEach(b => b.onclick = () => lancerEnchere(etat.chevaux.find(c => c.id === b.dataset.vendre), b.dataset.mise));
+  const rb = $('#ring-vente'); if (rb) rb.onclick = () => panneauVente();
 }
 function lancerEnchere(c, mise) {
   if (!c || etat.chevaux.length < 2) return;
@@ -3545,10 +3556,12 @@ function sautVente(E, o) { // le cheval franchit un obstacle de la piste : les a
 }
 function majChoixEnchere() { // boutons Oui / Non dès qu'il y a une offre ; c'est toi qui décides
   const E = enchere, b = $('#enchere-choix');
-  b.hidden = !E || !E.leader;
+  b.hidden = !E;
   if (b.hidden) return;
-  $('#ec-titre').textContent = `${E.c.nom} · offre de ${E.leader.nom}`;
+  $('#ec-oui').disabled = !E.leader;
+  $('#ec-titre').textContent = E.leader ? `${E.c.nom} · offre de ${E.leader.nom}` : `${E.c.nom} · mise à prix`;
   $('#ec-prix').textContent = `${E.prix} pièces`;
+  if (!E.leader) { $('#ec-texte').textContent = 'En attente d’une première offre…'; return; }
   $('#ec-texte').textContent = E.phase === 'decision' ? 'Plus personne ne surenchérit : à toi de décider.' : 'Les enchères continuent… tu peux accepter cette offre maintenant, ou attendre.';
 }
 function finirEnchere(vendu, refus = false) {
@@ -5523,6 +5536,7 @@ const interactions = [
   { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.5, texte: () => 'Entrer au gîte des cavaliers', action: () => panneauGite() },
   { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 18 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 18 h)', action: () => dormir() },
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
+  { x: VENTE.x + 4, z: VENTE.z + 7, r: 2.8, texte: () => 'Régler les obstacles de la piste des ventes', action: () => panneauObstaclesVente() },
   { x: VENTE.x - 8.6, z: VENTE.z, r: 3.2, texte: () => enchere ? `Vente de ${enchere.c.nom} en cours` : 'Maître Gaspard : vendre un cheval aux enchères', action: () => panneauVente() },
   { x: CANTINE.x + 2.6, z: CANTINE.z, r: 3.2, texte: () => 'Cantine : choisir le repas et appeler les enfants', action: () => panneauCantine() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
@@ -5745,6 +5759,7 @@ $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
 $('#ec-oui').onclick = () => { if (enchere?.leader) finirEnchere(true); };
 $('#ec-non').onclick = () => { if (enchere) finirEnchere(false, true); };
+$('#ec-obst').onclick = () => panneauObstaclesVente();
 $('#longe').addEventListener('pointerdown', e => { const b = e.target.closest('[data-longe]'); if (!b) return; e.preventDefault(); if (b.dataset.longe === 'fin') finirLonge(); else ordonnerLonge(b.dataset.longe); });
 $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[data-ordre]'); if (b) { e.preventDefault(); ordonner(b.dataset.ordre); } });
 $('#b-aide').onclick = aide;
@@ -6245,7 +6260,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
