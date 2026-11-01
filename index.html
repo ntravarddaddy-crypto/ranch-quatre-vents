@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 11:33";</script>
+<script>window.VERSION_JEU = "2026-11-01 11:45";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -141,6 +141,8 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .choix.choisi{border-color:var(--or);color:var(--or)}
 .choix:hover{border-color:var(--or)}
 .note{color:var(--texte-doux);font-size:12px;margin-top:14px!important}
+#enchere-choix{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(480px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
+#ec-oui{background:var(--vert)!important;color:#fff}
 #longe{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 .nuancier{display:flex;flex-wrap:wrap;gap:6px}.pastille{width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.35);padding:0;cursor:pointer}.pastille.on{outline:3px solid var(--or);outline-offset:2px}
 #lecon{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
@@ -162,7 +164,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .besoins{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;align-items:center;font-size:11px;color:var(--texte-doux);margin-top:4px}
 .besoins .jauge{margin:0;height:6px}
 @media (max-width:640px){
-  #lecon,#longe{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+  #lecon,#longe,#enchere-choix{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
   #voile.lateral{align-items:flex-end;padding:8px}
   body.atelier #gauche,body.atelier #minicarte,body.atelier #menu,body.atelier #tactile{display:none}
   #voile.lateral #panneau{max-height:52%}
@@ -200,7 +202,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   #tactile button{height:46px;font-size:13px}
   #tactile .saut{height:52px;font-size:16px}
   #invite{bottom:12px;font-size:13px;max-width:calc(100vw - 420px);white-space:normal;text-align:center}
-  #lecon,#longe{bottom:8px;width:min(400px,calc(100vw - 360px))}
+  #lecon,#longe,#enchere-choix{bottom:8px;width:min(400px,calc(100vw - 360px))}
   #chrono{font-size:16px}
   #voile #panneau{max-height:calc(100% - 4px);padding:12px}
 }
@@ -243,6 +245,11 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
   <div id="chrono" class="carton" hidden></div>
   <div id="toasts" aria-live="polite"></div>
   <div id="invite" class="carton" hidden></div>
+  <div id="enchere-choix" class="carton" hidden>
+    <div class="lecon-tete"><b id="ec-titre">Enchères</b><span id="ec-prix"></span></div>
+    <small id="ec-texte"></small>
+    <div class="ordres"><button type="button" id="ec-oui">Oui, je vends</button><button type="button" id="ec-non">Non, je le garde</button></div>
+  </div>
   <div id="longe" class="carton" hidden>
     <div class="lecon-tete"><b id="lg-titre">Longe</b><span id="lg-temps"></span></div>
     <div class="ordres">
@@ -386,6 +393,7 @@ const BOXES2 = { x1: 6, z: -18, n: 7, l: 4.2, prof: 4 };   // box des stagiaires
 const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; // grande écurie fermée (2026-10-12) : allée nord-sud
 // de x = -36 à -32.5, ouverte aux deux bouts ; 5 box à l'ouest (15 à 19), 5 à l'est (20 à 24)
 const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
+const VENTE = { x: 80, z: 47 };                                   // ring des ventes aux enchères (2026-11-01), tribune au nord
 const CANTINE = { x: 54, z: 39 };                                 // cantine (2026-11-01) : préau à l'est du gîte, comptoir côté est                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
 const PORTE_GITE = { x: GITE.x - GITE.hx - 1.3, z: GITE.z };
 const PRE_ENFANTS = { x1: 24, x2: 40, z1: -46, z2: -24, porte: { x: 30 } }; // pré des chevaux des stagiaires, à côté de leurs box, barrière au sud
@@ -1566,6 +1574,42 @@ let cuisiniere = null;
   for (let dx = -2.8; dx <= 2.8; dx += 0.7) meubles.push({ x: tx + dx, z: C.z, r: 0.42 });
   for (const dz of [-1.4, 0, 1.4]) meubles.push({ x: C.x + 3.6, z: C.z + dz, r: 0.5 });
 }
+// ring des ventes : piste de sable ovale bordée de blanc, tribune couverte de deux gradins au nord, estrade du
+// commissaire-priseur à l'ouest. Les acheteurs (ACHETEURS) sont assis sur la tribune.
+const ACHETEURS = ['M. Bernard', 'Mme Petit', 'Hugo', 'Sophie', 'Marcel', 'Claire', 'Antoine', 'Lucie'];
+const PLACES_ACHETEURS = ACHETEURS.map((_, i) => { const k = i % 2, j = Math.floor(i / 2); return { x: VENTE.x - 5.4 + j * 3.6 + k * 1.2, z: VENTE.z - 7.4 - k * 1.2, siege: 0.62 + k * 0.55 }; });
+let acheteurs = [], gaspard = null;
+{
+  const V = VENTE, g = new THREE.Group(), toit = new THREE.Group(); scene.add(g); scene.add(toit);
+  disque(V.x, V.z, 1, sableMat(4, 4), 0.025).scale.set(8, 4.6, 1);
+  const N = 26;
+  for (let i = 0; i < N; i++) { const a1 = i / N * Math.PI * 2, a2 = (i + 1) / N * Math.PI * 2; cloture(V.x + Math.cos(a1) * 8.3, V.z + Math.sin(a1) * 4.9, V.x + Math.cos(a2) * 8.3, V.z + Math.sin(a2) * 4.9, true, false, g); }
+  const bancs = new THREE.MeshStandardMaterial({ map: repete(TEX.bois, 5, 1), roughness: 0.8 }), metal = new THREE.MeshStandardMaterial({ color: 0x5b6670, roughness: 0.45, metalness: 0.6 });
+  for (let k = 0; k < 2; k++) { const h = 0.5 + k * 0.55; bloc(14, 0.12, 1.2, bancs, V.x, h, V.z - 7.4 - k * 1.2, g); bloc(14, h, 0.1, metal, V.x, h / 2, V.z - 6.8 - k * 1.2, g); }
+  for (const x of [V.x - 7, V.x, V.x + 7]) bloc(0.15, 3.4, 0.15, metal, x, 1.7, V.z - 9.4, g);
+  const tole = new THREE.MeshStandardMaterial({ color: 0x2f6a3a, roughness: 0.5, metalness: 0.3 });
+  bloc(15, 0.1, 3.8, tole, V.x, 3.4, V.z - 7.9, toit).rotation.x = -0.12;
+  // estrade et pupitre du commissaire-priseur
+  bloc(2.4, 0.5, 2.2, MAT.bois, V.x - 10, 0.25, V.z, g); bloc(0.9, 1.1, 0.5, MAT.peint, V.x - 9.3, 1.05, V.z, g); bloc(1.0, 0.06, 0.6, MAT.bois, V.x - 9.3, 1.63, V.z, g);
+  fusionner(g); fusionner(toit);
+  const lab = etiquette('Ventes aux enchères', '#2f1f13', '#f3b52d', 1.0); lab.position.set(V.x, 4.4, V.z - 6); scene.add(lab);
+}
+function construireVente() {
+  for (const a of acheteurs) scene.remove(a.p.g);
+  if (gaspard) scene.remove(gaspard.g);
+  const couleurs = [0x2f6fb5, 0xc0392b, 0x2e8b57, 0x7d3c98, 0xe8b923, 0x1aa39a, 0x8d5a3b, 0xe58fb4];
+  acheteurs = ACHETEURS.map((nom, i) => {
+    const pl = PLACES_ACHETEURS[i], genre = /^(Mme|Sophie|Claire|Lucie)/.test(nom) ? 'f' : 'm', p = pieton(null, couleurs[i], [0x6b3a1e, 0x2a2420, 0xd9a441, 0x8a4320, 0xb8b2a8][i % 5], genre);
+    p.g.rotation.y = 0; scene.add(p.g);
+    const a = { nom, p, pl, leve: 0, bulle: null }; asseoirAcheteur(a, true); return a;
+  });
+  gaspard = pieton('Maître Gaspard · ventes aux enchères', 0x222222, 0xb8b2a8, 'm'); gaspard.g.position.set(VENTE.x - 10.2, 0.5, VENTE.z); gaspard.g.rotation.y = Math.PI / 2; scene.add(gaspard.g);
+}
+function asseoirAcheteur(a, assis) {
+  const pl = a.pl, h = a.p;
+  if (h.humain) h.g.position.set(pl.x, assis ? pl.siege - h.H.hanchesAssis.y + 0.02 : pl.siege - 0.08, pl.z);
+  else { h.g.position.set(pl.x, assis ? pl.siege - 0.95 : pl.siege - 0.08, pl.z); h.jambes.forEach(j => { j.rotation.x = assis ? -1.4 : 0; }); }
+}
 function construireCuisiniere() {
   if (cuisiniere) scene.remove(cuisiniere.g);
   cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
@@ -1650,6 +1694,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (Math.abs(x - VENTE.x) < 13 && Math.abs(z - VENTE.z) < 11) return false;
   if (Math.abs(x - CANTINE.x) < 9 && Math.abs(z - CANTINE.z) < 8) return false;
   if (x > GRANGE.x1 - 5 && x < GRANGE.x2 + 5 && z > GRANGE.z1 - 6 && z < GRANGE.z2 + 6) return false;
   if (x > MAISON.x - MAISON.hx - 5 && x < MAISON.x + MAISON.hx + 5 && z > MAISON.z - MAISON.hz - 6 && z < MAISON.z + MAISON.hz + 5) return false;
@@ -2462,7 +2507,7 @@ function majCavalier(h, dt, vit, enLair) {
 let basileModele = null;
 function remplacerHumains() {
   construireActif(); construirePieton(); majResidents();
-  rafraichirCavaliers(); construireMarchands(); construirePalefreniers(); construireCuisiniere();
+  rafraichirCavaliers(); construireMarchands(); construirePalefreniers(); construireCuisiniere(); construireVente();
   if (basileModele && HUMAIN.pret && !basileModele.humain) { // Rémy peut arriver après Amy : une seule fois, et quand il est là
     scene.remove(basileModele);
     const h = humainReel({ veste: 0x2f6fb5, bas: 0x3d5a80, cheveux: 0x2a2420 }, 'Basile · Chevaux à vendre');
@@ -2681,7 +2726,7 @@ function majResidents() {
   residents.forEach(r => scene.remove(r.m.g));
   plaquesBox.forEach((p, i) => { if (p) scene.remove(p); plaquesBox[i] = null; });
   const meneId = mene?.cheval.id;
-  residents = etat.chevaux.filter(c => (etat.aPied || c.id !== etat.actif) && c.lieu !== 'van').map(c => {
+  residents = etat.chevaux.filter(c => (etat.aPied || c.id !== etat.actif) && c.lieu !== 'van' && c.lieu !== 'vente').map(c => {
     const m = modeleCheval(c, false);
     let r;
     if (c.lieu === 'box') { const p = BOX_POS(c.box); r = { cheval: c, m, x: p.x, z: p.z, rot: BOX_ROT(c.box), vit: 0, box: true, t: rand(0, 20) }; }
@@ -3104,7 +3149,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -3358,6 +3403,101 @@ function vendreCheval(id, bouton) {
   if (etat.actif === c.id) etat.actif = etat.chevaux[0].id;
   majResidents(); sonPiece(); sauver();
   toast(`${c.nom} est vendu à Basile pour ${prix} pièces`, 'or'); boutique();
+}
+// ---- Ventes aux enchères (2026-11-01) : on met un de ses chevaux en vente au ring (Maître Gaspard, E à l'estrade).
+// Le cheval tourne au pas sur la piste ; chaque acheteur a un prix maximum (0,75 à 1,6 fois la valeur du cheval,
+// prixVente : un cheval bien élevé monte donc plus haut). Celui qui enchérit se lève, lève la main et dit son prix.
+// Quand plus personne ne surenchérit : « une fois, deux fois, adjugé ! ».
+let enchere = null;
+const BRAS_LEVE = { x: -1.5, y: 0, z: 0, av: 0.2 }; // épaule droite (Mixamo) : x négatif lève le bras au-dessus de la tête (essayé le 2026-11-01)
+function panneauVente() {
+  if (ouvert()) fermer();
+  if (enchere) { ouvrir(`<div class="pnj">Maître Gaspard</div><h2>Une vente est en cours</h2><p>${enchere.c.nom} est sur la piste.</p>`); return; }
+  const dispo = etat.chevaux.filter(c => !(c.id === etat.actif && !etat.aPied) && c.lieu !== 'van');
+  const fiches = dispo.map(c => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span><div><h3>${c.nom}</h3><small>${c.race} · ${sexeTexte(c)}${poulain(c) ? ' · poulain' : ''}${c.elevage ? ` · élevage ${c.elevage} %` : ''}</small></div></div>
+    ${blocStats(c.stats, false)}<p class="note" style="margin:4px 0">Valeur estimée : <b>${prixVente(c)} pièces</b></p>
+    <div class="boutons">${[['basse', 'Mise à prix basse'], ['normale', 'Normale'], ['haute', 'Haute']].map(([k, l]) => `<button class="btn ${k === 'normale' ? 'or' : ''}" data-vendre="${c.id}" data-mise="${k}">${l} · ${Math.round(prixVente(c) * { basse: 0.5, normale: 0.7, haute: 0.95 }[k] / 5) * 5} p.</button>`).join('')}</div></article>`).join('');
+  ouvrir(`<div class="pnj">Maître Gaspard · commissaire-priseur</div><h2>Vendre aux enchères</h2>
+    <p>Choisis le cheval et sa mise à prix. Plus elle est haute, moins il y aura d’acheteurs ; trop haute, il peut ne pas trouver preneur. Les acheteurs paient plus cher un cheval bien dressé et bien élevé.</p>
+    ${etat.chevaux.length < 2 ? '<p class="note">Il te faut au moins deux chevaux pour en vendre un.</p>' : `<div class="grille">${fiches}</div>`}`);
+  $('#contenu').querySelectorAll('[data-vendre]').forEach(b => b.onclick = () => lancerEnchere(etat.chevaux.find(c => c.id === b.dataset.vendre), b.dataset.mise));
+}
+function lancerEnchere(c, mise) {
+  if (!c || etat.chevaux.length < 2) return;
+  const base = prixVente(c), depart = Math.round(base * { basse: 0.5, normale: 0.7, haute: 0.95 }[mise] / 5) * 5;
+  const pas = Math.max(5, Math.round(base * 0.05 / 5) * 5);
+  if (mene?.cheval === c) mene = null;
+  c.avantVente = { lieu: c.lieu, pre: c.pre, pos: c.pos }; c.lieu = 'vente'; majResidents();
+  const m = modeleCheval(c, false); scene.add(m.g);
+  enchere = { c, m, ang: Math.PI, prix: depart, pas, leader: null, tic: 3, phase: 'ouverture', compte: 0, offres: 0,
+    maxi: new Map(acheteurs.map(a => [a, Math.round(base * rand(0.75, 1.6) / 5) * 5])) };
+  fermer(); parler(gaspard, `${c.nom}, mise à prix ${depart} pièces !`);
+  toast(`Vente aux enchères de ${c.nom} : mise à prix ${depart} pièces`, 'or'); sauver();
+}
+function parler(qui, texte) { // bulle au-dessus d'un personnage, quelques secondes
+  const g = qui.g || qui.p?.g; if (!g) return;
+  if (qui.bulle) g.remove(qui.bulle);
+  const b = etiquette(texte, '#2f1f13', '#fbf1dc', 0.55); b.position.y = 2.6; g.add(b); qui.bulle = b; qui.tBulle = 2.8;
+}
+function majVente(dt) {
+  for (const a of acheteurs) {
+    const pres = Math.hypot(camera.position.x - a.pl.x, camera.position.z - a.pl.z) < 70; a.p.g.visible = pres;
+    if (a.tBulle > 0 && (a.tBulle -= dt) <= 0 && a.bulle) { a.p.g.remove(a.bulle); a.bulle = null; }
+    if (a.leve > 0) { a.leve -= dt; if (a.leve <= 0) asseoirAcheteur(a, true); }
+    if (!pres) continue;
+    if (a.p.humain) {
+      animerHumain(a.p, 0, dt, a.leve <= 0);
+      if (a.leve > 0) { const br = a.p.os.mixamorigRightArm, av = a.p.os.mixamorigRightForeArm; if (br) br.rotation.set(BRAS_LEVE.x, BRAS_LEVE.y, BRAS_LEVE.z); if (av) av.rotation.set(0, 0, BRAS_LEVE.av); } // main levée
+    } else { marcher(a.p, 0, dt); if (a.p.bras?.[0]) a.p.bras[0].rotation.x = a.leve > 0 ? -2.9 : 0; }
+  }
+  if (gaspard) { if (gaspard.tBulle > 0 && (gaspard.tBulle -= dt) <= 0 && gaspard.bulle) { gaspard.g.remove(gaspard.bulle); gaspard.bulle = null; } marcher(gaspard, 0, dt); }
+  const E = enchere; if (!E) return;
+  // le cheval fait le tour de la piste au pas
+  E.ang += dt * 1.4 / 6.2; const x = VENTE.x + Math.cos(E.ang) * 6.6, z = VENTE.z + Math.sin(E.ang) * 3.4;
+  const rot = Math.atan2(-Math.sin(E.ang) * 6.6, Math.cos(E.ang) * 3.4);
+  E.m.g.position.set(x, 0, z); E.m.g.rotation.y = rot; animer(E.m, 1.4, 0, false, dt);
+  majChoixEnchere();
+  if (E.phase === 'decision' || (E.tic -= dt) > 0) return;
+  const candidats = acheteurs.filter(a => a !== E.leader && E.maxi.get(a) >= (E.leader ? E.prix + E.pas : E.prix));
+  if (E.phase === 'ouverture' || E.phase === 'enchere' || (E.phase === 'compte' && candidats.length && Math.random() < 0.35)) {
+    if (candidats.length) {
+      const a = pick(candidats); if (E.leader) E.prix += E.pas;
+      E.leader = a; E.offres++; E.phase = 'enchere'; E.compte = 0; E.tic = rand(1.3, 2.6);
+      a.leve = 1.8; asseoirAcheteur(a, false); parler(a, `${E.prix} pièces !`); son(660, 0.08, 'triangle', 0.05);
+      return;
+    }
+    E.phase = 'compte'; E.compte = 0;
+  }
+  if (E.phase === 'compte') {
+    if (!E.leader) { finirEnchere(false); return; }
+    E.compte++; E.tic = 1.5;
+    if (E.compte === 1) parler(gaspard, `${E.prix} pièces… une fois !`);
+    else if (E.compte === 2) parler(gaspard, `${E.prix} pièces… deux fois !`);
+    else { E.phase = 'decision'; E.tic = 1e9; parler(gaspard, `Dernière offre : ${E.prix} pièces. On vend ?`); }
+  }
+}
+function majChoixEnchere() { // boutons Oui / Non dès qu'il y a une offre ; c'est toi qui décides
+  const E = enchere, b = $('#enchere-choix');
+  b.hidden = !E || !E.leader;
+  if (b.hidden) return;
+  $('#ec-titre').textContent = `${E.c.nom} · offre de ${E.leader.nom}`;
+  $('#ec-prix').textContent = `${E.prix} pièces`;
+  $('#ec-texte').textContent = E.phase === 'decision' ? 'Plus personne ne surenchérit : à toi de décider.' : 'Les enchères continuent… tu peux accepter cette offre maintenant, ou attendre.';
+}
+function finirEnchere(vendu, refus = false) {
+  const E = enchere; enchere = null; scene.remove(E.m.g); $('#enchere-choix').hidden = true;
+  const c = E.c;
+  if (!vendu) {
+    Object.assign(c, { lieu: E.c.avantVente.lieu, pre: E.c.avantVente.pre, pos: E.c.avantVente.pos }); delete c.avantVente;
+    if (refus) { parler(gaspard, `${c.nom} est retiré de la vente !`); toast(`Tu gardes ${c.nom} : la meilleure offre était ${E.prix} pièces`); }
+    else { parler(gaspard, 'Pas d’acheteur à ce prix…'); toast(`Personne n’a voulu de ${c.nom} à ${E.prix} pièces : il rentre au ranch. Essaie une mise à prix plus basse.`, 'rouge'); }
+    majResidents(); sauver(); return;
+  }
+  parler(gaspard, `Adjugé à ${E.leader.nom} pour ${E.prix} pièces !`);
+  etat.chevaux.splice(etat.chevaux.indexOf(c), 1); etat.pieces += E.prix; etat.compteurs.encheres = (etat.compteurs.encheres || 0) + 1;
+  if (etat.actif === c.id) etat.actif = etat.chevaux[0].id;
+  majResidents(); sonPiece(); sauver();
+  toast(`Adjugé ! ${c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces (${E.offres} enchère${E.offres > 1 ? 's' : ''}, valeur estimée ${prixVente(c)})`, 'or');
 }
 // ---- Ta maison : dormir, et l'état du ranch en un coup d'œil
 function panneauMaison() {
@@ -4414,7 +4554,12 @@ function arriveeEleve(e, jour) {
     case 'menePre': aller(e, pePorteDedans.x, pePorteDedans.z, 'entrePre'); break;
     case 'entrePre': if (st) { st.etat = 'pre'; st.cible = null; st.pause = 1; } e.attente = 0.6; e.etat = 'lache'; break;
     case 'lache': aller(e, pePorteDehors.x, pePorteDehors.z, 'sortPre'); break;
-    case 'sortPre': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); break; // le soir est tombé entre-temps : il retourne chercher son cheval
+    case 'sortPre': {
+      const pl = jour && e.s.dejJour !== etat.jour && etat.heure < HEURE_FIN_DEJ ? placeLibre() : null;
+      if (pl != null) { e.place_cantine = pl; aller(e, PLACES_CANTINE[pl].x, PLACES_CANTINE[pl].z, 'versDej'); } // petit-déjeuner à la cantine
+      else if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e);
+      break;
+    } // le soir est tombé entre-temps : il retourne chercher son cheval
     case 'versBanc': if (jour) { e.etat = 'attend'; e.p.g.rotation.y = Math.PI; } else soir(e); break;
     case 'cherchePre': aller(e, pePorteDedans.x, pePorteDedans.z, 'attendCheval'); break;
     case 'attendCheval': if (st) st.etat = 'vient'; e.etat = 'attendVenue'; break;
@@ -4428,11 +4573,8 @@ function arriveeEleve(e, jour) {
     case 'versGite': e.etat = 'gite'; e.p.g.visible = false; break;
     case 'revient': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); break;
     case 'part': scene.remove(e.p.g); eleves.splice(eleves.indexOf(e), 1); break;
-    case 'versCantine': {
-      e.etat = 'mange'; e.mange = HEURE_S * 0.75; asseoir(e, true);
-      const a = assiettes[e.place_cantine]; if (a) { a.visible = true; a.userData.plat.material = robeMat(COULEURS_PLAT[e.repas?.plat] ?? 0xc8762c, 0.8); }
-      break;
-    }
+    case 'versCantine': servir(e); break;
+    case 'versDej': e.etat = 'attendDej'; asseoir(e, true); break;
   }
 }
 function majEleves(dt) {
@@ -4447,6 +4589,14 @@ function majEleves(dt) {
     if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours') continue;
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
     if (!jour && e.etat === 'attend') soir(e);
+    if (e.etat === 'attendDej') { // assis, il attend son petit-déjeuner ; à 10 h 30, il renonce
+      if (e.p.humain) animerHumain(e.p, 0, dt, true); else marcher(e.p, 0, dt);
+      if (etat.heure >= HEURE_FIN_DEJ || !jour) {
+        e.s.dejJour = etat.jour; asseoir(e, false); e.place_cantine = null; e.p.g.position.set(e.x, 0, e.z); e.s.humeur = clamp(e.s.humeur - 8, 0, 100);
+        toast(`${e.nom} n’a pas eu de petit-déjeuner`, 'rouge'); if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e);
+      }
+      continue;
+    }
     if (e.etat === 'mange') { // à table : assis, il mange une heure de jeu
       if (e.p.humain) animerHumain(e.p, 0, dt, true); else marcher(e.p, 0, dt);
       if ((e.mange -= dt) <= 0 || !jour) finirRepas(e);
@@ -4469,6 +4619,7 @@ function majEleves(dt) {
 function majTemps(dt) {
   const avant = etat.heure;
   etat.heure += dt / HEURE_S;
+  if (avant < 7.5 && etat.heure >= 7.5 && etat.stagiaires.length) toast('Les enfants sortent leurs chevaux, puis vont à la cantine : sers-leur le petit-déjeuner (Cantine, K)', 'or');
   if (avant < 12 && etat.heure >= 12 && etat.stagiaires.length) toast('Midi : les enfants ont faim. Appelle-les à la cantine (bouton Cantine, ou touche K)', 'or');
   if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont au gîte');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
@@ -4487,7 +4638,7 @@ function tirerMeteo() {
 }
 function nouveauJour() {
   tirerMeteo();
-  for (const s of etat.stagiaires) s.faim = 100; // petit-déjeuner au gîte
+  for (const s of etat.stagiaires) s.faim = 60; // réveil : le petit-déjeuner se prend à la cantine
   payerPalefreniers();
   reproduction();
   if (etat.chevaux.some(c => c.naissance && etat.jour - c.naissance <= AGE_ADULTE + 1)) majResidents();
@@ -4527,9 +4678,17 @@ const PLATS = { pates: { le: 'les pâtes à la bolognaise', nom: 'Pâtes à la b
   poisson: { le: 'le poisson', nom: 'Poisson, riz et légumes', prix: 3, humeur: 7 }, hamburger: { le: 'les hamburgers', nom: 'Hamburger', prix: 5, humeur: 14 } };
 const DESSERTS = { aucun: { nom: 'Pas de dessert', prix: 0, humeur: 0 }, fruit: { nom: 'Un fruit', prix: 1, humeur: 3 }, compote: { nom: 'Compote', prix: 1, humeur: 3 },
   yaourt: { nom: 'Yaourt', prix: 1, humeur: 4 }, gateau: { nom: 'Gâteau au chocolat', prix: 2, humeur: 7 }, glace: { nom: 'Glace', prix: 2, humeur: 8 }, crepes: { nom: 'Crêpes', prix: 2, humeur: 8 } };
-const COULEURS_PLAT = { pates: 0xc8762c, pizza: 0xd9452e, poulet: 0xe6b450, croque: 0xe8c77a, lasagnes: 0xb9472a, soupe: 0x8fa04a, poisson: 0xf1ead8, hamburger: 0x7a4a2a };
+// petit-déjeuner (2026-11-01) : après avoir sorti leur cheval au pré, les enfants vont s'asseoir à la cantine et
+// attendent que tu le serves (jusqu'à 10 h 30 ; après, ils vont au banc le ventre à moitié vide)
+const DEJ = { tartines: { le: 'les tartines', nom: 'Tartines beurre confiture', prix: 2, humeur: 6 }, cereales: { le: 'les céréales', nom: 'Céréales et lait', prix: 2, humeur: 6 },
+  croissants: { le: 'les croissants', nom: 'Croissants', prix: 3, humeur: 9 }, painchoc: { le: 'les pains au chocolat', nom: 'Pains au chocolat', prix: 3, humeur: 10 },
+  crepes: { le: 'les crêpes', nom: 'Crêpes', prix: 3, humeur: 10 }, oeufs: { le: 'les œufs', nom: 'Œufs et pain grillé', prix: 2, humeur: 5 } };
+const BOISSONS = { chocolat: { nom: 'Chocolat chaud', prix: 1, humeur: 4 }, jus: { nom: 'Jus d’orange', prix: 1, humeur: 3 }, lait: { nom: 'Verre de lait', prix: 0, humeur: 1 } };
+const HEURE_FIN_DEJ = 10.5;
+const COULEURS_PLAT = { tartines: 0xd9a050, cereales: 0xe8d39a, croissants: 0xd8a24a, painchoc: 0x9a6232, oeufs: 0xf2d24a,  pates: 0xc8762c, pizza: 0xd9452e, poulet: 0xe6b450, croque: 0xe8c77a, lasagnes: 0xb9472a, soupe: 0x8fa04a, poisson: 0xf1ead8, hamburger: 0x7a4a2a };
 const hashNom = n => [...n].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
 const goutsDe = nom => { const k = Object.keys(PLATS), h = hashNom(nom), aime = k[h % k.length]; let deteste = k[(h >>> 4) % k.length]; if (deteste === aime) deteste = k[(k.indexOf(aime) + 3) % k.length]; return { aime, deteste }; };
+const placeLibre = () => PLACES_CANTINE.map((_, i) => i).find(i => !eleves.some(x => x.place_cantine === i && ['mange', 'versCantine', 'versDej', 'attendDej'].includes(x.etat)));
 const peutManger = e => e.p.g.visible && (e.etat === 'attend' || e.etat === 'versBanc');
 function panneauCantine() {
   if (ouvert()) fermer();
@@ -4539,13 +4698,20 @@ function panneauCantine() {
   const prix = PLATS[m.plat].prix + DESSERTS[m.dessert].prix, prets = eleves.filter(peutManger);
   const lignes = etat.stagiaires.map(s => {
     const e = eleves.find(x => x.s === s), g = goutsDe(s.nom), f = Math.round(s.faim ?? 100);
-    const ou = !e || !e.p.g.visible ? 'au gîte' : e.etat === 'mange' ? 'à table' : e.etat === 'versCantine' ? 'arrive à la cantine' : peutManger(e) ? 'au banc, prêt' : 'occupé';
+    const ou = !e || !e.p.g.visible ? 'au gîte' : e.etat === 'attendDej' ? 'attend son petit-déjeuner' : e.etat === 'versDej' ? 'vient déjeuner' : e.etat === 'mange' ? 'à table' : e.etat === 'versCantine' ? 'arrive à la cantine' : peutManger(e) ? 'au banc, prêt' : 'occupé';
     return `<div class="stat"><span>${s.nom} · ${ou}</span><div class="barre"><i style="width:${f}%;background:${f < 35 ? 'var(--rouge)' : f < 60 ? 'var(--or)' : 'var(--vert)'}"></i></div><b>${f}</b></div>
       <small style="display:block;margin:-2px 0 6px;opacity:.8">aime ${PLATS[g.aime].le} · n’aime pas ${PLATS[g.deteste].le}</small>`;
   }).join('');
   const choix = (liste, cle, attr) => Object.entries(liste).map(([k, v]) => `<button class="btn ${m[cle] === k ? 'or' : ''}" ${attr}="${k}">${v.nom}${v.prix ? ` · ${v.prix} p.` : ''}</button>`).join('');
+  const md = etat.menuDej ||= { dej: 'tartines', boisson: 'chocolat' }, attendent = eleves.filter(e => e.etat === 'attendDej'), prixDej = DEJ[md.dej].prix + BOISSONS[md.boisson].prix;
+  const blocDej = etat.heure < HEURE_FIN_DEJ ? `<h3 class="section">Petit-déjeuner · jusqu’à 10 h 30</h3>
+    <p class="note">${attendent.length ? `${attendent.map(e => e.nom).join(', ')} ${attendent.length > 1 ? 'attendent' : 'attend'} à table.` : 'Les enfants viennent s’asseoir ici après avoir sorti leur cheval au pré.'}</p>
+    <div class="boutons">${Object.entries(DEJ).map(([k, v]) => `<button class="btn ${md.dej === k ? 'or' : ''}" data-dej="${k}">${v.nom} · ${v.prix} p.</button>`).join('')}</div>
+    <div class="boutons">${Object.entries(BOISSONS).map(([k, v]) => `<button class="btn ${md.boisson === k ? 'or' : ''}" data-boisson="${k}">${v.nom}${v.prix ? ` · ${v.prix} p.` : ''}</button>`).join('')}</div>
+    <div class="boutons"><button class="btn or gros" id="servir-dej" ${attendent.length && etat.pieces >= prixDej * attendent.length ? '' : 'disabled'}>${attendent.length ? `Servir le petit-déjeuner · ${prixDej * attendent.length} pièces` : 'Personne n’attend encore'}</button></div>` : '';
   ouvrir(`<div class="pnj">Josette · cantine · jour ${etat.jour}, ${h}</div><h2>À table !</h2>
-    <h3 class="section">Faim des enfants</h3>${lignes}
+    <h3 class="section">Faim des enfants</h3>${lignes}${blocDej}
+    <h3 class="section">Déjeuner ou goûter</h3>
     <h3 class="section">Le plat</h3><div class="boutons">${choix(PLATS, 'plat', 'data-plat')}</div>
     <h3 class="section">Le dessert</h3><div class="boutons">${choix(DESSERTS, 'dessert', 'data-dessert')}</div>
     <p class="note">Repas : ${prix} pièce${prix > 1 ? 's' : ''} par enfant. Tu as ${etat.pieces} pièces.</p>
@@ -4553,14 +4719,25 @@ function panneauCantine() {
     <p class="note">Seuls les enfants assis au banc viennent : ceux qui sont avec leur cheval ou en cours finissent d’abord.</p>`);
   const C = $('#contenu');
   C.querySelectorAll('[data-plat]').forEach(b => b.onclick = () => { m.plat = b.dataset.plat; sauver(); panneauCantine(); });
+  C.querySelectorAll('[data-dej]').forEach(b => b.onclick = () => { md.dej = b.dataset.dej; sauver(); panneauCantine(); });
+  C.querySelectorAll('[data-boisson]').forEach(b => b.onclick = () => { md.boisson = b.dataset.boisson; sauver(); panneauCantine(); });
+  const sd = $('#servir-dej'); if (sd) sd.onclick = () => {
+    const liste = eleves.filter(e => e.etat === 'attendDej'), cout = prixDej * liste.length; if (!liste.length || etat.pieces < cout) return;
+    etat.pieces -= cout; sonPiece();
+    for (const e of liste) { e.repas = { dej: md.dej, boisson: md.boisson }; servir(e); }
+    sauver(); fermer(); toast(`Petit-déjeuner servi : ${DEJ[md.dej].nom.toLowerCase()} et ${BOISSONS[md.boisson].nom.toLowerCase()} · −${cout} pièces`, 'or');
+  };
   C.querySelectorAll('[data-dessert]').forEach(b => b.onclick = () => { m.dessert = b.dataset.dessert; sauver(); panneauCantine(); });
   $('#a-table').onclick = () => {
     const liste = eleves.filter(peutManger), cout = prix * liste.length; if (!liste.length || etat.pieces < cout) return;
     etat.pieces -= cout; sonPiece();
-    const libres = PLACES_CANTINE.map((_, i) => i).filter(i => !eleves.some(x => x.place_cantine === i && (x.etat === 'mange' || x.etat === 'versCantine')));
-    for (const e of liste) { const i = libres.shift(); if (i == null) break; e.place_cantine = i; e.repas = { plat: m.plat, dessert: m.dessert }; aller(e, PLACES_CANTINE[i].x, PLACES_CANTINE[i].z, 'versCantine'); }
+    for (const e of liste) { const i = placeLibre(); if (i == null) break; e.place_cantine = i; e.repas = { plat: m.plat, dessert: m.dessert }; aller(e, PLACES_CANTINE[i].x, PLACES_CANTINE[i].z, 'versCantine'); }
     sauver(); fermer(); toast(`À table ! ${PLATS[m.plat].nom}${m.dessert !== 'aucun' ? ` et ${DESSERTS[m.dessert].nom.toLowerCase()}` : ''} · −${cout} pièces`, 'or');
   };
+}
+function servir(e) {
+  e.etat = 'mange'; e.mange = HEURE_S * (e.repas?.dej ? 0.5 : 0.75); asseoir(e, true);
+  const a = assiettes[e.place_cantine]; if (a) { a.visible = true; a.userData.plat.material = robeMat(COULEURS_PLAT[e.repas?.plat || e.repas?.dej] ?? 0xc8762c, 0.8); }
 }
 function asseoir(e, oui) {
   const pl = PLACES_CANTINE[e.place_cantine];
@@ -4569,9 +4746,10 @@ function asseoir(e, oui) {
   if (oui && pl) { e.p.g.rotation.y = pl.rot; e.p.g.position.z = pl.z + (pl.rot ? 0.25 : -0.25); }
 }
 function finirRepas(e) {
-  const s = e.s, P = PLATS[e.repas?.plat] || PLATS.pates, D = DESSERTS[e.repas?.dessert] || DESSERTS.aucun, g = goutsDe(s.nom);
+  const s = e.s, petit = !!e.repas?.dej, P = petit ? DEJ[e.repas.dej] : PLATS[e.repas?.plat] || PLATS.pates, D = petit ? BOISSONS[e.repas.boisson] || BOISSONS.lait : DESSERTS[e.repas?.dessert] || DESSERTS.aucun, g = goutsDe(s.nom);
   let bonus = P.humeur + D.humeur;
-  if (e.repas?.plat === g.aime) { bonus += 10; toast(`${s.nom} adore ${P.le} !`, 'or'); }
+  if (petit) s.dejJour = etat.jour;
+  else if (e.repas?.plat === g.aime) { bonus += 10; toast(`${s.nom} adore ${P.le} !`, 'or'); }
   else if (e.repas?.plat === g.deteste) { bonus -= 6; toast(`${s.nom} n’aime pas ${P.le}…`, 'rouge'); }
   s.faim = 100; s.humeur = clamp(s.humeur + bonus, 0, 100);
   asseoir(e, false); assiettes[e.place_cantine] && (assiettes[e.place_cantine].visible = false);
@@ -4598,7 +4776,7 @@ function panneauGite() {
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -5223,6 +5401,7 @@ const interactions = [
   { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.5, texte: () => 'Entrer au gîte des cavaliers', action: () => panneauGite() },
   { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 18 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 18 h)', action: () => dormir() },
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
+  { x: VENTE.x - 8.6, z: VENTE.z, r: 3.2, texte: () => enchere ? `Vente de ${enchere.c.nom} en cours` : 'Maître Gaspard : vendre un cheval aux enchères', action: () => panneauVente() },
   { x: CANTINE.x + 2.6, z: CANTINE.z, r: 3.2, texte: () => 'Cantine : choisir le repas et appeler les enfants', action: () => panneauCantine() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
@@ -5442,6 +5621,8 @@ $('#b-sellerie').onclick = () => atelier();
 $('#b-amenager').onclick = () => amenager();
 $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
+$('#ec-oui').onclick = () => { if (enchere?.leader) finirEnchere(true); };
+$('#ec-non').onclick = () => { if (enchere) finirEnchere(false, true); };
 $('#longe').addEventListener('pointerdown', e => { const b = e.target.closest('[data-longe]'); if (!b) return; e.preventDefault(); if (b.dataset.longe === 'fin') finirLonge(); else ordonnerLonge(b.dataset.longe); });
 $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[data-ordre]'); if (b) { e.preventDefault(); ordonner(b.dataset.ordre); } });
 $('#b-aide').onclick = aide;
@@ -5461,7 +5642,7 @@ function appelCours() {
     const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
     return;
   }
-  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
+  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
   proposerLecon(null);
 }
 if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
@@ -5710,6 +5891,7 @@ function majMonde(dt, t) {
     else { o.tombe = Math.max(o.tombe, 0.01); o.barre.position.y += (0.08 - o.barre.position.y) * Math.min(1, dt * 6); o.barre.position.z = 0.6; o.barre.rotation.y = 0.15; }
   }
   majPalefreniers(dt);
+  majVente(dt);
   for (const r of residents) {
     if (r.box) { r.t += dt; vieBox(r, r.cheval.box, dt); continue; }
     majResident(r, dt);
@@ -5867,6 +6049,7 @@ function majHud(dt) {
   else if (concours) { ch.hidden = false; const K = concours.cav; ch.innerHTML = concours.attenteJoueur ? `Concours · à toi !<small>${etat.aPied ? 'monte à cheval, puis ' : ''}va au départ du parcours et appuie sur E</small>` : K ? `Concours · ${K.F.nom} · ${fr(K.t)} s<small>${K.F.fautes} faute${K.F.fautes > 1 ? 's' : ''} · concurrent ${concours.i + 1} sur ${concours.file.length} · V : caméra</small>` : `Concours<small>prochain concurrent… · V : caméra</small>`; }
   else if (balade?.type === 'marche') { ch.hidden = false; ch.innerHTML = `Sortie au marché<small>${balade.auMarche ? 'ramène les enfants au ranch' : 'la route vers l’est, puis le sud'} · descendre arrête la sortie</small>`; }
   else if (balade?.type === 'carriere') { ch.hidden = false; const n = balade.groupe.reduce((t, R) => t + R.sauts, 0); ch.innerHTML = `Cours en carrière · ${n} saut${n > 1 ? 's' : ''}<small>${balade.entre ? 'saute, ils te suivent · sors de la carrière pour finir' : 'emmène le groupe à la carrière, à l’est'}</small>`; }
+  else if (enchere) { ch.hidden = false; ch.innerHTML = `Enchères · ${enchere.c.nom} · ${enchere.prix} pièces<small>${enchere.leader ? `meilleure offre : ${enchere.leader.nom}` : 'en attente d’une première offre'}${enchere.phase === 'compte' ? ` · ${['', 'une fois…', 'deux fois…'][enchere.compte] || ''}` : enchere.phase === 'decision' ? ' · à toi de décider' : ''}</small>`; }
   else if (balade) { ch.hidden = false; ch.innerHTML = `Balade · bornes ${balade.bornes.size} sur ${BORNES.length}<small>${balade.groupe.map(R => R.e.nom).join(', ')} te ${balade.groupe.length > 1 ? 'suivent' : 'suit'} · descendre arrête la balade</small>`; }
   else ch.hidden = true;
   dessinerCarte();
@@ -5917,6 +6100,8 @@ function dessinerCarte() {
 function demarrer(donnees = {}) {
   etat = charger(donnees.etat);
   for (const [k, v] of Object.entries(etat.robes || {})) ROBES[k] = v;
+  if (enchere) { scene.remove(enchere.m.g); enchere = null; }
+  for (const c of etat.chevaux) if (c.lieu === 'vente') { Object.assign(c, c.avantVente || { lieu: 'box' }); delete c.avantVente; }
   etat.meteo ||= 'beau';
   J.x = etat.pos?.[0] ?? 0; J.z = etat.pos?.[1] ?? 14; J.rot = etat.rot ?? Math.PI;
   J.y = 0; J.vy = 0; J.vit = 0; J.auSol = true;
@@ -5924,7 +6109,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
@@ -5936,7 +6121,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
