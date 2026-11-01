@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 14:19";</script>
+<script>window.VERSION_JEU = "2026-11-01 15:18";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -395,6 +395,8 @@ const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; //
 const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
 const VENTE = { x: 80, z: 47 };                                   // ring des ventes aux enchères (2026-11-01), tribune au nord
 const CANTINE = { x: 54, z: 39 };
+// carré de dressage (2026-11-01) : 20 × 40 m à l'ouest du paddock de reproduction, A au sud (entrée), C au nord
+const CARRE = { x1: -100, x2: -80, z1: -12, z2: 28 };
 const LAVAGE = { x: 40, z: 37 };   // aire de lavage des chevaux, à la place de l'ancien gîte (2026-11-01)
 const SELLAGE = { x: -3, z: -7 };  // barre d'attache pour seller, à côté de la sellerie (2026-11-01)
 // dortoirs (2026-11-01) : un bâtiment creux au sud de la cantine, filles à l'ouest, garçons à l'est (mur au milieu, x = 48),
@@ -1774,6 +1776,113 @@ function majPoste(r, dt) { // le cheval attaché ne bouge plus ; effets de l'eau
     jet.position.copy(a).add(b).multiplyScalar(0.5); jet.scale.set(1, d.length(), 1); jet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
   }
 }
+// ---- Carré de dressage (2026-11-01) : lices blanches basses, lettres, panneau des figures à l'entrée (A).
+// Une figure = une suite de points au sol à passer dans l'ordre, à une allure imposée (trot, galop) ; « arrêt » : rester
+// immobile 2 s sur le point. Note sur 10 : points passés à la bonne allure et précision du tracé.
+const LETTRES = (() => { const C = CARRE, cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2;
+  return { A: [cx, C.z2], K: [C.x1, C.z2 - 6], E: [C.x1, cz], H: [C.x1, C.z1 + 6], C: [cx, C.z1], M: [C.x2, C.z1 + 6], B: [C.x2, cz], F: [C.x2, C.z2 - 6], X: [cx, cz] }; })();
+{
+  const C = CARRE, cx = (C.x1 + C.x2) / 2, g = new THREE.Group(); scene.add(g);
+  dalle(C.x1, C.z1, C.x2, C.z2, sableMat(4, 8, 0xf5ead2), 0.03);
+  const blanc = robeMat(0xf6f3ec, 0.5);
+  const lice = (a, b, c2, d) => { const L = Math.hypot(c2 - a, d - b); const m = bloc(c2 === a ? 0.12 : L, 0.3, c2 === a ? L : 0.12, blanc, (a + c2) / 2, 0.2, (b + d) / 2, g); segs.push({ x1: a, z1: b, x2: c2, z2: d, h: 0.45, tag: 'mur' }); return m; };
+  lice(C.x1, C.z1, C.x2, C.z1); lice(C.x1, C.z1, C.x1, C.z2); lice(C.x2, C.z1, C.x2, C.z2); lice(C.x1, C.z2, cx - 1.5, C.z2); lice(cx + 1.5, C.z2, C.x2, C.z2);
+  for (let x = C.x1; x <= C.x2; x += 4) bloc(0.14, 0.42, 0.14, blanc, x, 0.21, C.z1, g);
+  for (const [nom, [x, z]] of Object.entries(LETTRES)) {
+    if (nom === 'X') continue;
+    const dx = x === C.x1 ? -0.9 : x === C.x2 ? 0.9 : 0, dz = z === C.z1 ? -0.9 : z === C.z2 ? 0.9 : 0;
+    bloc(0.55, 0.65, 0.55, blanc, x + dx, 0.33, z + dz, g);
+    const lab = etiquette(nom, '#2f1f13', '#f3eee4', 0.55); lab.position.set(x + dx, 1.25, z + dz); scene.add(lab);
+  }
+  // panneau des figures, à droite de l'entrée A
+  for (const s2 of [-0.7, 0.7]) maille(cylGeo(0.06, 0.07, 1.8, 8), MAT.bois, cx + 3.5 + s2, 0.9, C.z2 + 2.2, g);
+  bloc(1.7, 1.1, 0.08, MAT.peint, cx + 3.5, 1.5, C.z2 + 2.2, g);
+  fusionner(g);
+  const lab = etiquette('Carré de dressage · figures', '#fbf1dc', 'rgba(125,79,176,.95)', 0.6); lab.position.set(cx + 3.5, 2.5, C.z2 + 2.2); scene.add(lab);
+}
+const FIGURES = (() => {
+  const C = CARRE, cx = (C.x1 + C.x2) / 2, cz = (C.z1 + C.z2) / 2, d = 1.3, pts = [];
+  const cercle = (ox, oz, r, a0, sens = 1, n = 16) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + sens * i / n * Math.PI * 2; return { x: ox + Math.sin(a) * r, z: oz + Math.cos(a) * r }; });
+  const ligne = (a, b, pas = 2.5) => { const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / pas)); return Array.from({ length: n + 1 }, (_, i) => ({ x: a.x + (b.x - a.x) * i / n, z: a.z + (b.z - a.z) * i / n })); };
+  const coins = [{ x: cx, z: C.z2 - d }, { x: C.x1 + d, z: C.z2 - d }, { x: C.x1 + d, z: C.z1 + d }, { x: C.x2 - d, z: C.z1 + d }, { x: C.x2 - d, z: C.z2 - d }, { x: cx, z: C.z2 - d }];
+  const piste = coins.slice(1).flatMap((c, i) => ligne(coins[i], c).slice(i ? 1 : 0));
+  return {
+    piste: { nom: 'Le tour de la piste', texte: 'Fais tout le tour du carré sur la piste, au trot, en passant bien dans les coins.', allure: 'trot', pts: piste, xp: ['endurance', 3] },
+    cercleA: { nom: 'Cercle de 20 m en A', texte: 'Un grand cercle bien rond à l’extrémité A, au trot.', allure: 'trot', pts: cercle(cx, C.z2 - 10, 8.7, Math.PI), xp: ['lien', 3] },
+    volteE: { nom: 'Volte de 10 m en E', texte: 'Un petit cercle de 10 m à la lettre E, au trot. Plus difficile : il faut bien tourner !', allure: 'trot', pts: cercle(C.x1 + d + 4.5, cz, 4.5, -Math.PI / 2, -1, 12), xp: ['lien', 4] },
+    diagonale: { nom: 'Diagonale K – X – M', texte: 'Traverse le carré en ligne droite de K à M en passant par X : c’est le changement de main, au trot.', allure: 'trot', pts: ligne({ x: C.x1 + d, z: C.z2 - 6 }, { x: C.x2 - d, z: C.z1 + 6 }, 2.2), xp: ['vitesse', 3] },
+    serpentine: { nom: 'Serpentine de 3 boucles', texte: 'De A à C en trois boucles qui touchent chaque grand côté, au trot.', allure: 'trot', pts: Array.from({ length: 31 }, (_, i) => { const t = i / 30; return { x: cx + 8.4 * Math.sin(3 * Math.PI * t), z: C.z2 - d - t * (C.z2 - C.z1 - 2 * d) }; }), xp: ['lien', 5] },
+    arretX: { nom: 'Arrêt en X', texte: 'Entre en A sur la ligne du milieu, arrête-toi 2 secondes en X (lâche la touche Avancer), puis repars jusqu’en C.', allure: 'trot', pts: [...ligne({ x: cx, z: C.z2 - 0.5 }, { x: cx, z: cz }).slice(0, -1), { x: cx, z: cz, arret: true }, ...ligne({ x: cx, z: cz }, { x: cx, z: C.z1 + d }).slice(1)], xp: ['lien', 4] },
+    cercleC: { nom: 'Cercle au galop en C', texte: 'Un cercle de 20 m à l’extrémité C, au galop (garde la touche Maj).', allure: 'galop', pts: cercle(cx, C.z1 + 10, 8.7, 0), xp: ['vitesse', 4] },
+  };
+})();
+const REPRISE = ['piste', 'cercleA', 'diagonale', 'arretX', 'cercleC'];
+let dressageCarre = null, reperesCarre = null;
+function panneauDressage() {
+  if (ouvert()) fermer();
+  if (dressageCarre) { ouvrir(`<div class="pnj">Carré de dressage</div><h2>${FIGURES[dressageCarre.figs[dressageCarre.f]].nom}</h2><p>Une figure est en cours.</p><div class="boutons"><button class="btn" id="dr-stop">Arrêter</button></div>`); $('#dr-stop').onclick = () => { fermer(); finirDressageCarre(true); }; return; }
+  const m = etat.dressageNotes ||= {};
+  const lignes = Object.entries(FIGURES).map(([k, F]) => `<article class="fiche"><h3>${F.nom}</h3><small>${F.texte}</small><small>Allure : ${F.allure}${m[k] != null ? ` · meilleure note : ${m[k]}/10` : ''}</small>
+    <div class="boutons"><button class="btn or" data-figure="${k}">Faire cette figure</button></div></article>`).join('');
+  ouvrir(`<div class="pnj">Carré de dressage · Inès te juge</div><h2>Que veux-tu travailler ?</h2>
+    <p>Choisis une figure : des repères apparaissent sur le sable. Passe-les dans l’ordre, à la bonne allure (le prochain est en jaune). Une note sur 10 à la fin.</p>
+    <div class="boutons"><button class="btn or gros" id="dr-reprise">Reprise complète (5 figures à la suite)</button></div>${m.reprise != null ? `<p class="note">Meilleure reprise : ${m.reprise}/10</p>` : ''}
+    <div class="grille">${lignes}</div>`);
+  $('#contenu').querySelectorAll('[data-figure]').forEach(b => b.onclick = () => commencerDressageCarre([b.dataset.figure]));
+  $('#dr-reprise').onclick = () => commencerDressageCarre(REPRISE, true);
+}
+function commencerDressageCarre(figs, reprise = false) {
+  if (etat.aPied) { toast('Monte à cheval pour faire ta figure (M)', 'rouge'); return; }
+  if (parcours.actif || concours || lecon || balade) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  fermer(); dressageCarre = { figs, f: 0, i: 0, points: 0, max: 0, reprise, arret: 0, notes: [] }; placerReperes(); son(660, 0.12, 'triangle', 0.05);
+  toast(`${FIGURES[figs[0]].nom} : passe les repères dans l’ordre, au ${FIGURES[figs[0]].allure}`, 'or');
+}
+function placerReperes() {
+  if (reperesCarre) scene.remove(reperesCarre);
+  const F = FIGURES[dressageCarre.figs[dressageCarre.f]]; reperesCarre = new THREE.Group(); scene.add(reperesCarre);
+  F.pts.forEach(p => { const d = new THREE.Mesh(new THREE.CircleGeometry(p.arret ? 0.6 : 0.32, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })); d.rotation.x = -Math.PI / 2; d.position.set(p.x, 0.06, p.z); reperesCarre.add(d); });
+  dressageCarre.i = 0; dressageCarre.arret = 0; dressageCarre.pFig = 0; dressageCarre.mFig = 0; majReperes();
+}
+function majReperes() {
+  const D = dressageCarre; if (!D || !reperesCarre) return;
+  reperesCarre.children.forEach((d, i) => d.material.color.setHex(i < D.i ? 0x2f9e5a : i === D.i ? 0xf3b52d : 0xffffff));
+}
+function majDressageCarre(dt) {
+  const D = dressageCarre; if (!D) return;
+  if (etat.aPied) { finirDressageCarre(true); return; }
+  const F = FIGURES[D.figs[D.f]], p = F.pts[D.i], v = Math.abs(J.vit), dist = Math.hypot(J.x - p.x, J.z - p.z);
+  const bonneAllure = F.allure === 'galop' ? v >= 8 : v > 2.5 && v < 8.5;
+  if (p.arret) {
+    if (dist < 1.6 && v < 0.6) { D.arret += dt; if (D.arret >= 2) { D.pFig += 1.5; D.mFig += 1.5; D.i++; toast('Bel arrêt !', 'or'); son(700, 0.1, 'triangle', 0.05); majReperes(); } }
+    else if (dist < 2.2 && v >= 0.6 && D.arret === 0) { /* il faut s'arrêter */ }
+    else if (dist > 4 && D.vuArret) { D.mFig += 1.5; D.i++; toast('Pas d’arrêt en X…', 'rouge'); majReperes(); }
+    if (dist < 2.2) D.vuArret = true;
+  } else if (dist < 1.9) {
+    D.mFig += 1; D.pFig += (bonneAllure ? 0.7 : 0.25) + 0.3 * clamp(1 - dist / 1.9, 0, 1); D.i++; majReperes();
+  } else { // un repère manqué : si le suivant est plus proche, on passe au suivant (compté comme raté)
+    const q = F.pts[D.i + 1]; if (q && Math.hypot(J.x - q.x, J.z - q.z) < 1.9) { D.mFig += 1; D.i++; majReperes(); }
+  }
+  if (D.i >= F.pts.length) {
+    const note = Math.round(D.pFig / Math.max(1, D.mFig) * 100) / 10; D.notes.push(note);
+    const [stat, n] = F.xp; gagnerXp(chevalActif(), stat, Math.round(n * note / 10) + 1);
+    const m = etat.dressageNotes ||= {}; if (!D.reprise && (m[D.figs[D.f]] == null || note > m[D.figs[D.f]])) m[D.figs[D.f]] = note;
+    if (D.f + 1 < D.figs.length) { toast(`${F.nom} : ${note}/10. Figure suivante : ${FIGURES[D.figs[D.f + 1]].nom}`, 'or'); D.f++; placerReperes(); }
+    else finirDressageCarre(false);
+  }
+}
+function finirDressageCarre(arrete) {
+  const D = dressageCarre; dressageCarre = null; if (reperesCarre) { scene.remove(reperesCarre); reperesCarre = null; }
+  if (!D || arrete) { if (D) toast('Figure arrêtée'); return; }
+  const note = Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10, gain = Math.round(note * (D.reprise ? 6 : 2));
+  etat.pieces += gain; etat.compteurs.dressageCarre = (etat.compteurs.dressageCarre || 0) + 1;
+  if (D.reprise) { const m = etat.dressageNotes ||= {}; if (m.reprise == null || note > m.reprise) m.reprise = note; }
+  const avis = note >= 9 ? 'Excellent !' : note >= 7.5 ? 'Très bien !' : note >= 6 ? 'Bien.' : note >= 4.5 ? 'Assez bien, à retravailler.' : 'À retravailler.';
+  sonPiece(); sauver();
+  ouvrir(`<div class="pnj">Inès · juge de dressage</div><h2>${D.reprise ? 'Reprise' : FIGURES[D.figs[0]].nom} : ${note}/10</h2>
+    <p><b>${avis}</b> ${D.reprise ? D.figs.map((k, i) => `${FIGURES[k].nom} : ${D.notes[i]}/10`).join(' · ') : ''}</p><p>+${gain} pièces.</p>
+    <div class="boutons"><button class="btn or" id="dr-encore">Choisir une autre figure</button></div>`);
+  $('#dr-encore').onclick = () => panneauDressage();
+}
 function construireCuisiniere() {
   if (cuisiniere) scene.remove(cuisiniere.g);
   cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
@@ -1858,6 +1967,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (x > CARRE.x1 - 6 && x < CARRE.x2 + 6 && z > CARRE.z1 - 6 && z < CARRE.z2 + 8) return false;
   if (Math.abs(x - LAVAGE.x) < 7 && Math.abs(z - LAVAGE.z) < 7) return false;
   if (Math.abs(x - SELLAGE.x) < 5 && Math.abs(z - SELLAGE.z) < 4) return false;
   if (x > DORT.x1 - 5 && x < DORT.x2 + 5 && z > DORT.z1 - 4 && z < DORT.z2 + 5) return false;
@@ -3404,7 +3514,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [LAVAGE.x - 4.5, LAVAGE.z - 5, LAVAGE.x + 4.5, LAVAGE.z + 5], [SELLAGE.x - 3.5, SELLAGE.z - 1.5, SELLAGE.x + 3.5, SELLAGE.z + 3.5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [CARRE.x1 - 2, CARRE.z1 - 2, CARRE.x2 + 2, CARRE.z2 + 5], [LAVAGE.x - 4.5, LAVAGE.z - 5, LAVAGE.x + 4.5, LAVAGE.z + 5], [SELLAGE.x - 3.5, SELLAGE.z - 1.5, SELLAGE.x + 3.5, SELLAGE.z + 3.5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -5931,6 +6041,7 @@ const interactions = [
   { x: VENTE.x - 8.6, z: VENTE.z, r: 3.2, texte: () => enchere ? `Vente de ${enchere.c.nom} en cours` : 'Maître Gaspard : vendre un cheval aux enchères', action: () => panneauVente() },
   { x: LAVAGE.x, z: LAVAGE.z, r: 4.5, texte: () => mene || !etat.aPied ? `Laver ${(mene?.cheval || chevalActif()).nom} à l’aire de lavage` : 'Aire de lavage : amène un cheval', action: () => ouvrirPoste('lavage') },
   { x: SELLAGE.x, z: SELLAGE.z + 1.5, r: 3.5, texte: () => mene || !etat.aPied ? `Seller ${(mene?.cheval || chevalActif()).nom} à la barre d’attache` : 'Barre d’attache : amène un cheval pour le seller', action: () => ouvrirPoste('sellage') },
+  { x: (CARRE.x1 + CARRE.x2) / 2 + 3.5, z: CARRE.z2 + 2.2, r: 3.5, texte: () => dressageCarre ? 'Dressage en cours : arrêter ?' : 'Carré de dressage : choisir une figure', action: () => panneauDressage() },
   { x: CANTINE.x + 2.6, z: CANTINE.z, r: 3.2, texte: () => 'Cantine : choisir le repas et appeler les enfants', action: () => panneauCantine() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
@@ -6428,6 +6539,7 @@ function majMonde(dt, t) {
   }
   majPalefreniers(dt);
   majCordes();
+  majDressageCarre(dt);
   majVente(dt);
   for (const r of residents) {
     if (r.box) { r.t += dt; vieBox(r, r.cheval.box, dt); continue; }
@@ -6586,6 +6698,7 @@ function majHud(dt) {
   else if (concours) { ch.hidden = false; const K = concours.cav; ch.innerHTML = concours.attenteJoueur ? `Concours · à toi !<small>${etat.aPied ? 'monte à cheval, puis ' : ''}va au départ du parcours et appuie sur E</small>` : K ? `Concours · ${K.F.nom} · ${fr(K.t)} s<small>${K.F.fautes} faute${K.F.fautes > 1 ? 's' : ''} · concurrent ${concours.i + 1} sur ${concours.file.length} · V : caméra</small>` : `Concours<small>prochain concurrent… · V : caméra</small>`; }
   else if (balade?.type === 'marche') { ch.hidden = false; ch.innerHTML = `Sortie au marché<small>${balade.auMarche ? 'ramène les enfants au ranch' : 'la route vers l’est, puis le sud'} · descendre arrête la sortie</small>`; }
   else if (balade?.type === 'carriere') { ch.hidden = false; const n = balade.groupe.reduce((t, R) => t + R.sauts, 0); ch.innerHTML = `Cours en carrière · ${n} saut${n > 1 ? 's' : ''}<small>${balade.entre ? 'saute, ils te suivent · sors de la carrière pour finir' : 'emmène le groupe à la carrière, à l’est'}</small>`; }
+  else if (dressageCarre) { const D = dressageCarre, F = FIGURES[D.figs[D.f]], v = Math.abs(J.vit), ok = F.allure === 'galop' ? v >= 8 : v > 2.5 && v < 8.5; ch.hidden = false; ch.innerHTML = `Dressage · ${F.nom}${D.reprise ? ` (${D.f + 1}/${D.figs.length})` : ''}<small>repère ${Math.min(D.i + 1, F.pts.length)} sur ${F.pts.length} · ${F.pts[D.i]?.arret ? 'arrête-toi sur le grand rond' : `au ${F.allure} : ${ok ? 'bonne allure' : 'mauvaise allure'}`}</small>`; }
   else if (enchere) { ch.hidden = false; ch.innerHTML = `Enchères · ${enchere.c.nom} · ${enchere.prix} pièces<small>${enchere.leader ? `meilleure offre : ${enchere.leader.nom}` : 'en attente d’une première offre'}${enchere.phase === 'compte' ? ` · ${['', 'une fois…', 'deux fois…'][enchere.compte] || ''}` : enchere.phase === 'decision' ? ' · à toi de décider' : ''}</small>`; }
   else if (balade) { ch.hidden = false; ch.innerHTML = `Balade · bornes ${balade.bornes.size} sur ${BORNES.length}<small>${balade.groupe.map(R => R.e.nom).join(', ')} te ${balade.groupe.length > 1 ? 'suivent' : 'suit'} · descendre arrête la balade</small>`; }
   else ch.hidden = true;
@@ -6659,7 +6772,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
