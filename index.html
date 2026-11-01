@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 18:01";</script>
+<script>window.VERSION_JEU = "2026-11-01 18:04";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -1932,10 +1932,11 @@ function nouvelleInvitation(dans = null) {
 }
 function invitationsDuJour() { // à minuit : on retire les anciennes, il en arrive parfois une nouvelle
   const l = mesInvitations(); for (let i = l.length - 1; i >= 0; i--) if (l[i].jour < etat.jour) l.splice(i, 1);
+  if (etat.monConcours?.jour === etat.jour) setTimeout(() => toast('C’est aujourd’hui ton concours ! Lance-le depuis le bouton Concours (J)', 'or'), 6000);
   if (l.length < 3 && Math.random() < 0.75) { const inv = nouvelleInvitation(); setTimeout(() => toast(`Invitation : ${LIEUX_CONCOURS[inv.lieu].nom} t’invite au concours du jour ${inv.jour}, toi et tes élèves (bouton Concours, touche J)`, 'or'), 5200); }
 }
 function reponseEnfant(e, inv) {
-  const L = LIEUX_CONCOURS[inv.lieu], hMax = niveauDe(e.niveau || 1).hMax, aimeSaut = hashNom(e.nom) % 10 < 7, f = e.genre === 'f';
+  const L = inv.lieu ? LIEUX_CONCOURS[inv.lieu] : { h: inv.h }, hMax = niveauDe(e.niveau || 1).hMax, aimeSaut = hashNom(e.nom) % 10 < 7, f = e.genre === 'f';
   if (inv.jour >= e.s.depart) return ['non', `Je serai déjà rentré${f ? 'e' : ''} chez moi ce jour-là…`];
   if (e.s.humeur < 30) return ['non', 'Je n’ai pas trop le moral pour un concours…'];
   if (L.h > hMax + 0.15) return ['non', `${fr(L.h, 1)} m ? C’est trop haut pour moi pour l’instant !`];
@@ -1957,7 +1958,8 @@ function panneauInvitations() {
   }).join('');
   ouvrir(`<div class="pnj">Courrier des concours · jour ${etat.jour}</div><h2>Invitations</h2>
     <p>Les clubs des environs t’invitent, toi et tes élèves. Demande à chacun s’il veut participer ; le jour venu, partez ensemble (inscription : 15 pièces par cavalier).</p>
-    ${cartes || '<p class="note">Pas d’invitation pour le moment : il en arrive presque chaque nuit.</p>'}`);
+    ${cartes || '<p class="note">Pas d’invitation pour le moment : il en arrive presque chaque nuit.</p>'}
+    ${blocMonConcours()}`);
   const C = $('#contenu'), trouve = id => mesInvitations().find(x => x.id === id);
   C.querySelectorAll('[data-moi]').forEach(b => b.onchange = () => { trouve(b.dataset.moi).moi = b.checked; sauver(); });
   C.querySelectorAll('[data-demander]').forEach(b => b.onclick = () => {
@@ -1966,6 +1968,60 @@ function panneauInvitations() {
   });
   C.querySelectorAll('[data-refuser]').forEach(b => b.onclick = () => { const l2 = mesInvitations(); l2.splice(l2.indexOf(trouve(b.dataset.refuser)), 1); sauver(); panneauInvitations(); });
   C.querySelectorAll('[data-partir]').forEach(b => b.onclick = () => partirAuConcours(trouve(b.dataset.partir)));
+  brancherMonConcours(C);
+}
+// ---- Ton concours à toi (2026-11-01) : tu choisis le jour, tu envoies les invitations aux autres ranchs et clubs (ils
+// répondent oui ou non, avec combien de cavaliers), tu demandes à tes élèves ; le jour venu, les invités arrivent en van
+// et le concours se court dans ta carrière (chaque cavalier invité te paie 40 pièces d'engagement).
+const CLUBS_INVITABLES = () => [...Object.values(LIEUX_CONCOURS).map(L => L.nom), ...RANCHS.filter(r => !Object.values(LIEUX_CONCOURS).some(L => L.nom === r))];
+const hauteurCarriere = () => Math.max(...etat.carriere.obstacles.map(o => hEff(o.type, o.h)));
+function blocMonConcours() {
+  const M = etat.monConcours;
+  if (M && M.jour < etat.jour) etat.monConcours = null;
+  if (!etat.monConcours) return `<h3 class="section">Organiser ton concours au Ranch des Quatre Vents</h3>
+    <p class="note">Choisis le jour, puis envoie tes invitations aux autres ranchs. Le parcours est celui de ta carrière (hauteur max actuelle : ${fr(hauteurCarriere(), 2)} m, à régler au tableau du matériel).</p>
+    <div class="boutons">${[1, 2, 3].map(n => `<button class="btn or" data-organiser="${n}">Le jour ${etat.jour + n}</button>`).join('')}</div>`;
+  const C = etat.monConcours, invites = Object.entries(C.clubs).filter(([, r]) => r?.[0] === 'oui'), nbInvites = invites.reduce((t, [, r]) => t + r[2], 0);
+  const enfants = eleves.filter(e => e.p.g.visible || e.etat === 'dort'), aujourdhui = C.jour === etat.jour;
+  return `<h3 class="section">Ton concours · jour ${C.jour}${aujourdhui ? ' (aujourd’hui !)' : ''}</h3>
+    <p class="note">${nbInvites} cavalier${nbInvites > 1 ? 's' : ''} invité${nbInvites > 1 ? 's' : ''} ${nbInvites > 1 ? 'viendront' : 'viendra'} : ${nbInvites * 40} pièces d’engagement pour toi.</p>
+    ${CLUBS_INVITABLES().map(nom => { const r = C.clubs[nom]; return `<div style="margin:4px 0">${r ? `<b>${nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-inviter="${nom}">Envoyer une invitation à ${nom}</button>`}</div>`; }).join('')}
+    <h3 class="section">Tes élèves</h3>
+    ${enfants.length ? enfants.map(e => { const r = C.eleves[e.nom]; return `<div style="margin:4px 0">${r ? `<b>${e.nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-mon-eleve="${e.nom}">Demander à ${e.nom}</button>`}</div>`; }).join('') : '<p class="note">Aucun élève en stage.</p>'}
+    <label class="choix"><input type="checkbox" id="mon-moi" ${C.moi ? 'checked' : ''}> Je cours aussi</label>
+    <div class="boutons" style="margin-top:8px">${aujourdhui ? `<button class="btn or gros" id="mon-lancer" ${heureDeCours() ? '' : 'disabled'}>Lancer mon concours</button>` : ''}<button class="btn" id="mon-annuler">Annuler mon concours</button></div>`;
+}
+function reponseClub(nom) {
+  if (Math.random() < 0.28) return ['non', pick(['Désolés, nous avons déjà un concours ce jour-là.', 'Nos chevaux se reposent cette semaine, merci quand même !', 'Trop loin pour nous, une autre fois !'])];
+  const n = 1 + Math.floor(Math.random() * 2);
+  return ['oui', pick([`Avec plaisir ! Nous viendrons avec ${n} cavalier${n > 1 ? 's' : ''}.`, `Merci pour l’invitation : ${n} de nos cavaliers seront là !`, `Super ! On amène ${n} cheva${n > 1 ? 'ux' : 'l'} en van.`]), n];
+}
+function brancherMonConcours(C) {
+  C.querySelectorAll('[data-organiser]').forEach(b => b.onclick = () => { etat.monConcours = { jour: etat.jour + +b.dataset.organiser, clubs: {}, eleves: {}, moi: true }; sauver(); panneauInvitations(); });
+  const M = etat.monConcours; if (!M) return;
+  C.querySelectorAll('[data-inviter]').forEach(b => b.onclick = () => { M.clubs[b.dataset.inviter] = reponseClub(b.dataset.inviter); son(520, 0.08, 'triangle', 0.04); sauver(); panneauInvitations(); });
+  C.querySelectorAll('[data-mon-eleve]').forEach(b => b.onclick = () => { const e = eleves.find(x => x.nom === b.dataset.monEleve); if (!e) return; M.eleves[e.nom] = reponseEnfant(e, { jour: M.jour, lieu: null, h: hauteurCarriere() }); sauver(); panneauInvitations(); });
+  const mm = $('#mon-moi'); if (mm) mm.onchange = () => { M.moi = mm.checked; sauver(); };
+  const an = $('#mon-annuler'); if (an) an.onclick = () => { etat.monConcours = null; sauver(); panneauInvitations(); };
+  const la = $('#mon-lancer'); if (la) la.onclick = () => lancerMonConcours();
+}
+function lancerMonConcours() {
+  const M = etat.monConcours; if (!M) return;
+  if (concours || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  if (M.moi && etat.aPied) { toast('Monte à cheval pour courir (M), ou décoche « Je cours aussi »', 'rouge'); return; }
+  const clubs = Object.entries(M.clubs).filter(([, r]) => r?.[0] === 'oui');
+  const visiteurs = clubs.flatMap(([nom, r]) => entreesVisiteurs(r[2], [Math.max(2, Math.round(hauteurCarriere() * 10) - 3), Math.round(hauteurCarriere() * 10) + 3], [nom]));
+  const enfants = Object.entries(M.eleves).filter(([, r]) => r[0] === 'oui').map(([n]) => eleves.find(e => e.nom === n)).filter(e => e && !['lecon', 'balade', 'concours', 'part'].includes(e.etat));
+  if (!visiteurs.length && !enfants.length && !M.moi) { toast('Personne ne vient : envoie des invitations', 'rouge'); return; }
+  for (const e of enfants) { if (e.etat === 'dort') lever(e); if (e.etat === 'mange' || e.etat === 'attendDej') { asseoir(e, false); e.place_cantine = null; } }
+  etat.monConcours = null; fermer();
+  retirerVisiteurs();
+  clubs.forEach(([nom], i) => { // les vans des invités, garés à l'est de la carrière
+    const a = attelage(VISITEURS.x1 + 5 + (i % 4) * 7, VISITEURS.z1 + 9 - Math.floor(i / 4) * 6, 0, [0x7a1c1c, 0xd9d9d6, 0x1c2a4a, 0x3a3a3a][i % 4], [0x2f6fb5, 0xc0392b, 0xf3b52d, 0x2e8b57][i % 4]); visiteursDecor.push(a);
+    const lab = etiquette(nom, '#fbf1dc', 'rgba(38,25,15,.8)', 0.5); lab.position.set(VISITEURS.x1 + 5 + (i % 4) * 7, 3.2, VISITEURS.z1 + 9 - Math.floor(i / 4) * 6); scene.add(lab); visiteursDecor.push(lab);
+  });
+  toast(`Tes invités arrivent : ${clubs.map(([n]) => n).join(', ') || 'personne d’autre, entre vous'}`, 'or');
+  lancerConcours([...visiteurs, ...enfants.map(entreeEnfant), ...(M.moi ? [entreeJoueur()] : [])], { type: 'ouvert', pause: 6 });
 }
 function partirAuConcours(inv) {
   if (!inv) return; const L = LIEUX_CONCOURS[inv.lieu];
