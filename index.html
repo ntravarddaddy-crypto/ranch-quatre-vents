@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 14:15";</script>
+<script>window.VERSION_JEU = "2026-11-01 14:19";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -466,7 +466,7 @@ const AGE_LONGE = 2, AGE_SAUT = 4, AGE_DEBOURRAGE = 1;
 // débourrage (2026-11-01) : à partir d'un an, cinq étapes dans l'ordre (c.debourrage = étapes faites) ; une fois débourré
 // (c.debourre), un cheval né au ranch peut être monté. Les chevaux achetés ou apprivoisés arrivent débourrés.
 const ETAPES_DEBOURRAGE = [['licol', 'Licol et marche en main', 'Il suit tranquillement au bout de la longe'], ['toucher', 'Le toucher partout, lui prendre les pieds', 'Il se laisse toucher et donne ses pieds'],
-  ['selle', 'Tapis et selle sur le dos', 'Il accepte la selle, la sangle serrée doucement'], ['filet', 'Le filet et le mors', 'Il mâchonne son mors sans s’inquiéter'], ['cavalier', 'Premier cavalier sur son dos', 'Premiers pas avec un cavalier sur le dos !']];
+  ['selle', 'Tapis et selle sur le dos', 'Il accepte la selle, la sangle serrée doucement'], ['longeSelle', 'Longer avec la selle au rond de longe', 'Il a tourné sellé au rond de longe, au pas et au trot, sans faire de bêtises'], ['filet', 'Le filet et le mors', 'Il mâchonne son mors sans s’inquiéter'], ['cavalier', 'Premier cavalier sur son dos', 'Premiers pas avec un cavalier sur le dos !']];
 const debourre = c => c.naissance == null || !!c.debourre;
 const ageCheval = c => c.naissance != null ? Math.max(0, etat.jour - c.naissance) : (c.age0 ?? 6) + Math.max(0, etat.jour - (c.jourAge0 ?? etat.jour));
 const auPre = id => { const n = prePar(id)?.nom ?? 'pré'; return /^Nurserie/.test(n) ? 'à la nurserie des poulains' : `au ${n.charAt(0).toLowerCase() + n.slice(1)}`; };
@@ -3319,6 +3319,11 @@ function aupresDuCheval(r) {
   $('#contenu').querySelectorAll('[data-poulain]').forEach(b => b.onclick = () => soignerPoulain(c, b.dataset.poulain, r));
   $('#contenu').querySelectorAll('[data-debourrer]').forEach(b => b.onclick = () => {
     const i = c.debourrage || 0, et = ETAPES_DEBOURRAGE[i]; if (!et || et[0] !== b.dataset.debourrer) return;
+    if (et[0] === 'longeSelle') { // cette étape se fait pour de vrai : une séance de longe, sellé, au rond de longe
+      if (Math.hypot(J.x - MANEGE.x, J.z - MANEGE.z) > MANEGE.r) { toast(`Emmène ${c.nom} au rond de longe (Mener en main), puis recommence cette étape`, 'rouge'); return; }
+      if (!c.licol) c.licol = mesLicols()[0] || 'rouge';
+      c.sellee = true; majResidents(); const nr = residents.find(x => x.cheval === c); fermer(); if (nr) commencerLonge(nr, { debourrage: true }); return;
+    }
     derniersSoins[c.id + 'deb'] = maintenant(); c.debourrage = i + 1; gagnerXp(c, 'lien', 5);
     if (c.debourrage >= ETAPES_DEBOURRAGE.length) { c.debourre = true; etat.compteurs.debourres = (etat.compteurs.debourres || 0) + 1; toast(`Bravo ! ${c.nom} est débourré${c.sexe === 'jument' ? 'e' : ''} : tu peux ${c.sexe === 'jument' ? 'la' : 'le'} monter (M)`, 'or'); sonPiece(); }
     else toast(`${c.nom} : ${et[2]}`, 'or');
@@ -4668,6 +4673,53 @@ const VIT_ALLURE = { arret: 0, pas: 1.6, trot: 3.8, galop: 8.4 }; // galop au-de
 const PISTE = { x: (MANEGE_C.x1 + MANEGE_C.x2) / 2, z: (MANEGE_C.z1 + MANEGE_C.z2) / 2, rx: 15.5, rz: 7.5 };
 const eleves = []; // les stagiaires présents, en personnages
 let lecon = null;
+// ---- Corde du licol et rênes (2026-11-01) : des cordes qui pendent un peu, refaites à chaque image.
+// Cheval mené en main : la corde du licol, du menton à la main du joueur. Cheval sellé sans cavalier : les rênes
+// posées du mors au garrot. Cheval monté : les rênes du mors aux mains de la cavalière.
+const cordes = [];
+const _ca = new THREE.Vector3(), _cb = new THREE.Vector3(), _cc = new THREE.Vector3(), _cd = new THREE.Vector3();
+function corde(i, a, b, couleur, creux = 0.25) {
+  let l = cordes[i];
+  if (!l) { l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 12 }, () => new THREE.Vector3())), new THREE.LineBasicMaterial({ color: couleur })); l.frustumCulled = false; scene.add(l); cordes[i] = l; }
+  l.visible = true; l.material.color.setHex(couleur);
+  const pos = l.geometry.attributes.position, d = a.distanceTo(b);
+  for (let k = 0; k < 12; k++) { const t = k / 11; pos.setXYZ(k, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - Math.sin(Math.PI * t) * creux * Math.min(1, d), a.z + (b.z - a.z) * t); }
+  pos.needsUpdate = true;
+}
+function mors(m, cote, v) { // coin de la bouche (cote = 1 gauche, -1 droite, 0 menton) en coordonnées du monde
+  if (m.reel) {
+    const os = m.modele, mach = os.getObjectByName('BN_Jaw_027_026'), nez = os.getObjectByName(cote >= 0 ? 'BN_L_Nose_031_030' : 'BN_R_Nose_032_031');
+    if (!mach || !nez) return m.g.getWorldPosition(v).setY(1.2);
+    mach.getWorldPosition(v); nez.getWorldPosition(_cd);
+    return cote === 0 ? v.lerp(_cd, 0.35) : v.lerp(_cd, 0.55);
+  }
+  if (!m.tete) return m.g.getWorldPosition(v).setY(1.2);
+  return m.tete.localToWorld(v.set(cote * 0.07, -0.06, 0.48));
+}
+function majCordes() {
+  let n = 0;
+  const cuir = 0x2a1a10;
+  // cheval monté : rênes du mors aux mains
+  if (actifM && !etat.aPied && actifM.cavalier?.os) {
+    const os = actifM.cavalier.os, c = chevalActif(), col = equipement(c).cBride ?? cuir;
+    for (const [cote, main] of [[1, 'mixamorigLeftHand'], [-1, 'mixamorigRightHand']]) if (os[main]) corde(n++, mors(actifM, cote, _ca).clone(), os[main].getWorldPosition(_cb).clone(), col, 0.08);
+  }
+  for (const r of residents) {
+    if (!r.m.g.visible || Math.hypot(camera.position.x - r.x, camera.position.z - r.z) > 45) continue;
+    const c = r.cheval;
+    if (c.sellee && !(longe && longe.id === c.id)) { // rênes posées sur l'encolure, jusqu'au pommeau
+      const col = equipement(c).cBride ?? cuir, g = r.m.g;
+      for (const cote of [1, -1]) { const a = mors(r.m, cote, _ca).clone(); const b = g.localToWorld(_cb.set(cote * 0.14, 1.7, 0.4)).clone(); corde(n++, a, b, col, 0.22); }
+    }
+    if (r === mene && c.licol && !(longe && longe.id === c.id)) { // corde du licol jusqu'à la main
+      const a = mors(r.m, 0, _ca).clone();
+      const h = pietonJoueur?.os?.mixamorigRightHand;
+      const b = h ? h.getWorldPosition(_cb).clone() : _cb.set(J.x + Math.cos(J.rot) * -0.3, 0.95, J.z - Math.sin(J.rot) * -0.3).clone();
+      corde(n++, a, b, couleurLicol(c) ?? 0xc0392b, 0.35);
+    }
+  }
+  for (let i = n; i < cordes.length; i++) cordes[i].visible = false;
+}
 // ---- Longe : le cheval (avec licol) tourne en cercle autour de toi, au pas, au trot ou au galop, pendant 40 s.
 // Au rond de longe (le manège rond), dans la carrière ou dans un pré assez grand. Il y gagne endurance, vitesse et lien.
 let longe = null, ligneLonge = null;
@@ -4686,10 +4738,10 @@ function lieuDeLonge() {
   if (R >= 3.5) return { x: J.x, z: J.z, R, nom: 'ici' };
   return null;
 }
-function commencerLonge(r) {
+function commencerLonge(r, opts = {}) {
   const c = r.cheval;
   if (!etat.aPied) { toast('Descends de cheval pour longer', 'rouge'); return; }
-  if (ageCheval(c) < AGE_LONGE) { toast(`${c.nom} n’a que ${ageTexte(c)} : on commence la longe à ${AGE_LONGE} ans`, 'rouge'); return; }
+  if (ageCheval(c) < AGE_LONGE && !opts.debourrage) { toast(`${c.nom} n’a que ${ageTexte(c)} : on commence la longe à ${AGE_LONGE} ans`, 'rouge'); return; }
   if (!c.licol) { toast(`Mets d’abord un licol à ${c.nom}`, 'rouge'); return; }
   if (r.box) { toast(`${c.nom} est au box : sors-le d’abord (Mener en main, ou l’Écurie)`, 'rouge'); return; }
   if (lecon || balade || concours) { toast('Finis d’abord ton cours ou ta sortie', 'rouge'); return; }
@@ -4698,7 +4750,7 @@ function commencerLonge(r) {
   J.x = L.x; J.z = L.z;
   const ang = Math.atan2(r.x - L.x, r.z - L.z) || 0;
   r.x = L.x + Math.sin(ang) * L.R; r.z = L.z + Math.cos(ang) * L.R;
-  longe = { id: c.id, x: L.x, z: L.z, R: L.R, ang, sens: 1, allure: 'pas', vit: 0, t: 0, duree: 40, xp: { endurance: 0, vitesse: 0, lien: 0 } };
+  longe = { id: c.id, x: L.x, z: L.z, R: L.R, ang, sens: 1, allure: 'pas', vit: 0, t: 0, duree: opts.debourrage ? 30 : 40, debourrage: !!opts.debourrage, xp: { endurance: 0, vitesse: 0, lien: 0 } };
   ligneLonge = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xf3eee4 }));
   ligneLonge.frustumCulled = false; scene.add(ligneLonge);
   $('#longe').hidden = false; majPanneauLonge();
@@ -4726,7 +4778,7 @@ function majLonge(r, dt) {
   r.m.g.position.set(x, 0, z); r.m.g.rotation.y = r.rot; animer(r.m, L.vit, 0, false, dt);
   const pos = ligneLonge.geometry.attributes.position;
   pos.setXYZ(0, J.x + Math.sin(J.rot) * 0.3, 1.05, J.z + Math.cos(J.rot) * 0.3);
-  pos.setXYZ(1, x + Math.sin(r.rot) * 1.05, 1.35, z + Math.cos(r.rot) * 1.05); pos.needsUpdate = true;
+  const mo = mors(r.m, 0, _cc); pos.setXYZ(1, mo.x, mo.y, mo.z); pos.needsUpdate = true;
   if (L.allure !== 'arret') {
     L.t += dt;
     if (L.allure === 'pas') { L.xp.endurance += 0.15 * dt; L.xp.lien += 0.12 * dt; }
@@ -4747,6 +4799,11 @@ function finirLonge(complete = false) {
   for (const [k, v] of gains) gagnerXp(c, k, v);
   if (L.t > 5) { c.faim = Math.max(0, (c.faim ?? 80) - L.t / 6); c.soif = Math.max(0, (c.soif ?? 80) - L.t / 5); }
   etat.compteurs.longes = (etat.compteurs.longes || 0) + (complete ? 1 : 0);
+  if (L.debourrage) { // étape du débourrage : validée si la séance va jusqu'au bout (ou au moins 20 s de travail)
+    const i = c.debourrage || 0;
+    if ((complete || L.t >= 20) && ETAPES_DEBOURRAGE[i]?.[0] === 'longeSelle') { c.debourrage = i + 1; derniersSoins[c.id + 'deb'] = maintenant(); gagnerXp(c, 'lien', 5); toast(`${c.nom} : ${ETAPES_DEBOURRAGE[i][2]}`, 'or'); sauver(); return; }
+    if (ETAPES_DEBOURRAGE[i]?.[0] === 'longeSelle') { toast('Séance trop courte pour le débourrage : recommence (au moins 20 secondes au pas ou au trot)', 'rouge'); sauver(); return; }
+  }
   toast(complete ? `Bravo ! Séance de longe finie : ${c.nom} gagne ${gains.map(([k, v]) => `+${v} ${NOM_STAT[k].toLowerCase()}`).join(', ') || 'un peu de confiance'}` : `Longe arrêtée${gains.length ? ` : ${gains.map(([k, v]) => `+${v} ${NOM_STAT[k].toLowerCase()}`).join(', ')}` : ''}`, complete ? 'or' : '');
   sauver();
 }
@@ -6370,6 +6427,7 @@ function majMonde(dt, t) {
     else { o.tombe = Math.max(o.tombe, 0.01); o.barre.position.y += (0.08 - o.barre.position.y) * Math.min(1, dt * 6); o.barre.position.z = 0.6; o.barre.rotation.y = 0.15; }
   }
   majPalefreniers(dt);
+  majCordes();
   majVente(dt);
   for (const r of residents) {
     if (r.box) { r.t += dt; vieBox(r, r.cheval.box, dt); continue; }
