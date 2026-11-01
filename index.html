@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 18:04";</script>
+<script>window.VERSION_JEU = "2026-11-01 18:10";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -241,6 +241,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
     <button id="b-appel-cours" type="button">Cours <kbd>C</kbd></button>
     <button id="b-cantine" type="button">Cantine <kbd>K</kbd></button>
     <button id="b-invit" type="button">Concours <kbd>J</kbd></button>
+    <button id="b-ranchs" type="button">Invitations <kbd>I</kbd></button>
     <button id="b-aide" type="button">Aide <kbd>?</kbd></button>
   </nav>
   <div id="chrono" class="carton" hidden></div>
@@ -1990,6 +1991,30 @@ function blocMonConcours() {
     ${enfants.length ? enfants.map(e => { const r = C.eleves[e.nom]; return `<div style="margin:4px 0">${r ? `<b>${e.nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-mon-eleve="${e.nom}">Demander à ${e.nom}</button>`}</div>`; }).join('') : '<p class="note">Aucun élève en stage.</p>'}
     <label class="choix"><input type="checkbox" id="mon-moi" ${C.moi ? 'checked' : ''}> Je cours aussi</label>
     <div class="boutons" style="margin-top:8px">${aujourdhui ? `<button class="btn or gros" id="mon-lancer" ${heureDeCours() ? '' : 'disabled'}>Lancer mon concours</button>` : ''}<button class="btn" id="mon-annuler">Annuler mon concours</button></div>`;
+}
+// ---- Bouton « Invitations » (2026-11-01) : tous les ranchs et clubs par leur nom ; pour chacun, l'invitation qu'il t'a
+// envoyée (s'il y en a une) et le bouton pour l'inviter à ton concours
+function panneauRanchs() {
+  if (ouvert()) fermer();
+  const M = etat.monConcours && etat.monConcours.jour >= etat.jour ? etat.monConcours : null;
+  const cartes = CLUBS_INVITABLES().map(nom => {
+    const cle = Object.keys(LIEUX_CONCOURS).find(k => LIEUX_CONCOURS[k].nom === nom), L = cle && LIEUX_CONCOURS[cle];
+    const recue = cle && mesInvitations().find(i => i.lieu === cle), rep2 = M?.clubs[nom];
+    return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(L ? L.couleur : 0x8d5a3b)}"></span><div><h3>${nom}</h3>
+      <small>${L ? `${L.texte} · terrain de concours, obstacles de ${fr(L.h, 1)} m` : 'Ranch voisin'}</small></div></div>
+      ${recue ? `<p class="note" style="color:var(--or);margin:4px 0">Il t’invite à son concours du jour ${recue.jour}.</p><div class="boutons"><button class="btn" data-voir-invit="1">Voir l’invitation</button></div>` : ''}
+      <div class="boutons">${!M ? '<span class="note">Choisis d’abord le jour de ton concours, en haut.</span>' : rep2 ? `<span style="color:${rep2[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${rep2[1]} »</span>` : `<button class="btn or" data-inviter-ranch="${nom}">L’inviter à mon concours</button>`}</div></article>`;
+  }).join('');
+  ouvrir(`<div class="pnj">Invitations · jour ${etat.jour}</div><h2>Tous les ranchs</h2>
+    ${M ? `<p>Ton concours : <b>jour ${M.jour}</b>${M.jour === etat.jour ? ' (aujourd’hui !)' : ''}. Invite qui tu veux ci-dessous ; tes élèves et le départ, c’est dans le bouton Concours.</p>`
+      : `<p>Pour inviter les autres ranchs, choisis d’abord le jour de ton concours :</p><div class="boutons">${[1, 2, 3].map(n => `<button class="btn or" data-jour-concours="${n}">Le jour ${etat.jour + n}</button>`).join('')}</div>`}
+    <div class="grille">${cartes}</div>
+    <div class="boutons" style="margin-top:10px"><button class="btn" id="vers-concours">Ouvrir le bouton Concours (élèves, départ)</button></div>`);
+  const C = $('#contenu');
+  C.querySelectorAll('[data-jour-concours]').forEach(b => b.onclick = () => { etat.monConcours = { jour: etat.jour + +b.dataset.jourConcours, clubs: {}, eleves: {}, moi: true }; sauver(); panneauRanchs(); });
+  C.querySelectorAll('[data-inviter-ranch]').forEach(b => b.onclick = () => { etat.monConcours.clubs[b.dataset.inviterRanch] = reponseClub(b.dataset.inviterRanch); son(520, 0.08, 'triangle', 0.04); sauver(); panneauRanchs(); });
+  C.querySelectorAll('[data-voir-invit]').forEach(b => b.onclick = () => panneauInvitations());
+  $('#vers-concours').onclick = () => panneauInvitations();
 }
 function reponseClub(nom) {
   if (Math.random() < 0.28) return ['non', pick(['Désolés, nous avons déjà un concours ce jour-là.', 'Nos chevaux se reposent cette semaine, merci quand même !', 'Trop loin pour nous, une autre fois !'])];
@@ -6414,6 +6439,7 @@ addEventListener('keydown', e => {
   if (l === 'c') appelCours();
   if (l === 'k') panneauCantine();
   if (l === 'j') panneauInvitations();
+  if (l === 'i') panneauRanchs();
   if (lecon && /^(Digit|Numpad)[1-5]$/.test(e.code)) ordonner(ORDRES[+e.code.slice(-1) - 1][0]);
   if (l === 'f') nourrir(etat.pommes ? 'pomme' : 'carotte');
   if (concours && l === 'v') { vueConcours = !vueConcours; camPrete = false; }
@@ -6437,6 +6463,7 @@ $('#invite').onclick = e => { e.preventDefault(); interagir(); }; // toucher le 
 $('#b-appel-cours').onclick = e => { e.currentTarget.blur(); appelCours(); };
 $('#b-cantine').onclick = e => { e.currentTarget.blur(); panneauCantine(); };
 $('#b-invit').onclick = e => { e.currentTarget.blur(); panneauInvitations(); };
+$('#b-ranchs').onclick = e => { e.currentTarget.blur(); panneauRanchs(); };
 // le bouton « Cours » : appeler les enfants d'où que l'on soit (au lieu d'aller les chercher au banc)
 function appelCours() {
   if (ouvert()) fermer();
@@ -6937,7 +6964,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
