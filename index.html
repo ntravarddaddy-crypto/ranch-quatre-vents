@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 14:05";</script>
+<script>window.VERSION_JEU = "2026-11-01 14:15";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -395,6 +395,8 @@ const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; //
 const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
 const VENTE = { x: 80, z: 47 };                                   // ring des ventes aux enchères (2026-11-01), tribune au nord
 const CANTINE = { x: 54, z: 39 };
+const LAVAGE = { x: 40, z: 37 };   // aire de lavage des chevaux, à la place de l'ancien gîte (2026-11-01)
+const SELLAGE = { x: -3, z: -7 };  // barre d'attache pour seller, à côté de la sellerie (2026-11-01)
 // dortoirs (2026-11-01) : un bâtiment creux au sud de la cantine, filles à l'ouest, garçons à l'est (mur au milieu, x = 48),
 // une porte chacun côté nord, 5 lits et 2 douches par dortoir
 const DORT = { x1: 40, x2: 56, z1: 50, z2: 59, mid: 48 };
@@ -1657,6 +1659,121 @@ function lever(e) {
   const l = litDe(e); if (l.dormeur.userData.eleve === e) l.dormeur.visible = false;
   e.x = l.pied.x; e.z = l.pied.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z);
 }
+// ---- Aire de lavage et barre d'attache (2026-11-01) : on y amène un cheval (mené en main, ou à cheval : on descend
+// tout seul), il reste attaché pendant qu'on s'en occupe (posteActif), étape par étape.
+const PLACE_LAVAGE = { x: LAVAGE.x, z: LAVAGE.z, rot: -Math.PI / 2 }, PLACE_SELLAGE = { x: SELLAGE.x - 1, z: SELLAGE.z + 2.3, rot: Math.PI };
+let posteActif = null, effetsLavage = null;
+{
+  // aire de lavage : dalle de béton avec rigole, portique de douche, enrouleur et tuyau, seau et éponge
+  const L = LAVAGE, g = new THREE.Group(); scene.add(g);
+  const beton = new THREE.MeshStandardMaterial({ map: repete(TEX.sable, 3, 4), color: 0xb7b8b4, roughness: 0.8 }), metal = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, roughness: 0.35, metalness: 0.8 });
+  bloc(6, 0.12, 8, beton, L.x, 0.06, L.z, g); bloc(0.3, 0.02, 7.6, robeMat(0x55595c, 0.6), L.x + 2.4, 0.125, L.z, g); // dalle et rigole
+  for (const dz of [-1.6, 1.6]) maille(cylGeo(0.07, 0.08, 3, 10), metal, L.x - 0.9, 1.5, L.z + dz, g);
+  maille(cylGeo(0.05, 0.05, 3.3, 10), metal, L.x - 0.9, 3, L.z, g).rotation.x = Math.PI / 2;
+  maille(cylGeo(0.12, 0.08, 0.06, 14), metal, L.x - 0.9, 2.92, L.z, g); // pomme de douche
+  for (const dz of [-1.6, 1.6]) maille(new THREE.TorusGeometry(0.06, 0.012, 6, 14), metal, L.x - 0.9, 1.3, L.z + dz * 0.95, g); // anneaux d'attache
+  bloc(0.5, 1.0, 0.25, robeMat(0x2f6a3a, 0.6), L.x - 2.6, 0.5, L.z - 3.2, g); // robinet sur son support
+  const enr = maille(new THREE.TorusGeometry(0.28, 0.07, 8, 20), robeMat(0x2f8f4a, 0.6), L.x - 2.6, 1.15, L.z - 3.05, g);
+  maille(cylGeo(0.17, 0.14, 0.32, 14), robeMat(0x2f6fb5, 0.5), L.x + 2.4, 0.28, L.z + 3.1, g); ovo(0.09, 0.05, 0.06, robeMat(0xf3d24a, 0.9), L.x + 2.4, 0.47, L.z + 3.1, g);
+  fusionner(g);
+  const lab = etiquette('Aire de lavage', '#fbf1dc', 'rgba(47,111,181,.95)', 0.7); lab.position.set(L.x - 0.9, 3.8, L.z); scene.add(lab);
+  // effets : jet d'eau et mousse (cachés hors du lavage)
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.25, 1, 10, 1, true), new THREE.MeshStandardMaterial({ color: 0xbfe7ff, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }));
+  jet.visible = false; scene.add(jet);
+  const mousse = new THREE.Group(); mousse.visible = false; scene.add(mousse);
+  const blancMousse = robeMat(0xffffff, 0.9);
+  for (let i = 0; i < 26; i++) ovo(rand(0.06, 0.12), rand(0.05, 0.09), rand(0.06, 0.12), blancMousse, rand(-0.25, 0.25), rand(1.2, 1.62), rand(-0.75, 0.6), mousse);
+  effetsLavage = { jet, mousse };
+}
+{
+  // barre d'attache : deux poteaux et une barre, un porte-selle avec une selle, un coffre de pansage, un montoir
+  const S = SELLAGE, g = new THREE.Group(); scene.add(g);
+  for (const dx of [-2.2, 2.2]) maille(cylGeo(0.09, 0.1, 1.3, 10), MAT.bois, S.x + dx, 0.65, S.z, g);
+  maille(cylGeo(0.06, 0.06, 4.6, 10), MAT.bois, S.x, 1.15, S.z, g).rotation.z = Math.PI / 2;
+  for (const dx of [-1, 1]) maille(new THREE.TorusGeometry(0.05, 0.01, 6, 12), robeMat(0x9aa3ab, 0.3), S.x + dx, 1.05, S.z + 0.06, g);
+  bloc(0.12, 1.0, 0.12, MAT.bois, S.x + 3.2, 0.5, S.z + 0.8, g); bloc(0.5, 0.08, 0.7, MAT.bois, S.x + 3.2, 1.02, S.z + 0.8, g); // porte-selle
+  bloc(0.8, 0.5, 0.45, robeMat(0x7a2230, 0.7), S.x - 3.2, 0.25, S.z + 0.9, g); // coffre de pansage
+  bloc(0.7, 0.3, 0.7, MAT.bois, S.x + 1.2, 0.15, S.z + 3.6, g); bloc(0.7, 0.3, 0.35, MAT.bois, S.x + 1.2, 0.45, S.z + 3.78, g); // montoir
+  fusionner(g);
+  const lab = etiquette('Barre d’attache · seller', '#2f1f13', '#f3eee4', 0.6); lab.position.set(S.x, 2.2, S.z); scene.add(lab);
+}
+let selleExposee = null;
+function poserSelleExposee() { // une vraie selle sur le porte-selle (après le chargement : selleRealiste est déclarée plus loin)
+  if (selleExposee) return; const S = SELLAGE;
+  selleExposee = new THREE.Group(); selleExposee.position.set(S.x + 3.2, -0.6, S.z + 0.8); scene.add(selleExposee);
+  selleRealiste(selleExposee, { selle: 'mixte' }, robeMat(0x4a2614, 0.45), robeMat(0x2f6fb5, 0.9));
+}
+const ETAPES_LAVAGE = [['mouiller', 'Mouiller au jet', 'jet'], ['shampoing', 'Shampoing et éponge', 'mousse'], ['rincer', 'Rincer', 'jet'], ['racler', 'Racler l’eau', null], ['crins', 'Démêler crins et queue', null]];
+const ETAPES_SELLAGE = [['brosser', 'Brosser'], ['pieds', 'Curer les pieds'], ['tapis', 'Poser le tapis'], ['selle', 'Poser la selle'], ['sangler', 'Sangler doucement'], ['filet', 'Mettre le filet']];
+function chevalPourPoste() { // le cheval mené, ou celui que l'on monte (on en descend)
+  if (!etat.aPied) { const id = etat.actif; descendre(); const r = residents.find(x => x.cheval.id === id); if (r) mene = r; }
+  return mene;
+}
+function ouvrirPoste(type) {
+  let r = posteActif ? residents.find(x => x.cheval.id === posteActif.id) : chevalPourPoste();
+  if (!r) { toast(`Amène un cheval : à cheval, ou « Mener en main » depuis sa fenêtre (E à côté de lui)`, 'rouge'); return; }
+  if (type === 'lavage' && r.cheval.sellee) { const id = r.cheval.id; r.cheval.sellee = false; majResidents(); toast(`Tu desselles ${r.cheval.nom} avant de ${r.cheval.sexe === 'jument' ? 'la' : 'le'} laver`); r = residents.find(x => x.cheval.id === id) || r; mene = r; }
+  const place = type === 'lavage' ? PLACE_LAVAGE : PLACE_SELLAGE;
+  if (!posteActif || posteActif.type !== type || posteActif.id !== r.cheval.id) posteActif = { type, id: r.cheval.id, place, faites: 0, effet: 0 };
+  r.x = place.x; r.z = place.z; r.rot = place.rot; r.trace = null;
+  J.x = place.x + (type === 'lavage' ? 0.8 : 1.4); J.z = place.z + (type === 'lavage' ? -1.6 : 0.4); J.rot = Math.atan2(place.x - J.x, place.z - J.z);
+  panneauPoste();
+}
+function panneauPoste() {
+  const P = posteActif; if (!P) return; const c = etat.chevaux.find(h => h.id === P.id); if (!c) { posteActif = null; return; }
+  const etapes = P.type === 'lavage' ? ETAPES_LAVAGE : ETAPES_SELLAGE, e = equipement(c);
+  const lignes = etapes.map(([k, l], i) => i < P.faites ? `<div style="margin:3px 0"><span style="color:var(--vert);font-weight:800">Fait</span> · ${l}</div>`
+    : i === P.faites ? `<div style="margin:3px 0"><button class="btn or" data-poste="${k}" ${P.effet > 0 ? 'disabled' : ''}>${i + 1}. ${l}</button></div>` : `<div style="margin:3px 0;opacity:.55">${i + 1}. ${l}</div>`).join('');
+  const fini = P.faites >= etapes.length;
+  const choixSelle = P.type === 'sellage' ? `<h3 class="section">Selle et tapis de ${c.nom}</h3>
+    <div class="boutons">${etat.selles.map(k => `<button class="btn ${e.selle === k ? 'or' : ''}" data-choix-selle="${k}">${SELLES[k]?.nom || k}</button>`).join('')}</div>
+    <div class="boutons">${(etat.tapis || ['uni']).map(k => `<button class="btn ${(e.tapis || 'uni') === k ? 'or' : ''}" data-choix-tapis="${k}">${TAPIS[k]?.nom || k}</button>`).join('')}</div>` : '';
+  ouvrir(`<div class="pnj">${P.type === 'lavage' ? 'Aire de lavage' : 'Barre d’attache'} · ${c.nom}</div><h2>${P.type === 'lavage' ? `Laver ${c.nom}` : c.sellee && !P.faites ? `${c.nom} est sellé${c.sexe === 'jument' ? 'e' : ''}` : `Seller ${c.nom}`}</h2>
+    ${choixSelle}<h3 class="section">Étapes</h3>${lignes}
+    <div class="boutons" style="margin-top:10px">${fini || (P.type === 'sellage' && c.sellee) ? `<button class="btn or gros" id="poste-monter">Monter ${c.nom}</button>` : ''}
+      ${P.type === 'sellage' && c.sellee ? '<button class="btn" id="poste-desseller">Desseller</button>' : ''}<button class="btn" id="poste-fin">Le détacher</button></div>`, 'lateral'); // panneau sur le côté : on voit le cheval
+  const C = $('#contenu');
+  C.querySelectorAll('[data-poste]').forEach(b => b.onclick = () => faireEtapePoste(b.dataset.poste));
+  C.querySelectorAll('[data-choix-selle]').forEach(b => b.onclick = () => { e.selle = b.dataset.choixSelle; if (c.sellee) majResidents(); sauver(); panneauPoste(); });
+  C.querySelectorAll('[data-choix-tapis]').forEach(b => b.onclick = () => { e.tapis = b.dataset.choixTapis; if (c.sellee) majResidents(); sauver(); panneauPoste(); });
+  const pm = $('#poste-monter'); if (pm) pm.onclick = () => { fermer(); monter(c.id); };
+  const pd = $('#poste-desseller'); if (pd) pd.onclick = () => { c.sellee = false; P.faites = 0; majResidents(); sauver(); toast(`${c.nom} est dessellé${c.sexe === 'jument' ? 'e' : ''}`); panneauPoste(); };
+  $('#poste-fin').onclick = () => { fermer(); };
+}
+function faireEtapePoste(k) {
+  const P = posteActif; if (!P || P.effet > 0) return; const c = etat.chevaux.find(h => h.id === P.id);
+  const etapes = P.type === 'lavage' ? ETAPES_LAVAGE : ETAPES_SELLAGE, i = P.faites; if (etapes[i]?.[0] !== k) return;
+  P.effet = 2; P.effetType = etapes[i][2] || null; son(P.type === 'lavage' ? 300 : 520, 0.12, 'triangle', 0.04);
+  if (P.type === 'sellage' && (k === 'selle' || k === 'tapis' || k === 'filet')) { c.sellee = k !== 'tapis' || c.sellee; if (k === 'selle') { c.sellee = true; majResidents(); } }
+  setTimeout(() => {
+    if (posteActif !== P) return;
+    P.effet = 0; P.faites++;
+    if (P.faites >= etapes.length) {
+      if (P.type === 'lavage') { c.lave = etat.jour; gagnerXp(c, 'lien', 6); toast(`${c.nom} brille comme un sou neuf ! (+lien, et un cheval propre se vend mieux aujourd’hui)`, 'or'); }
+      else { c.sellee = true; gagnerXp(c, 'lien', 4); majResidents(); toast(`${c.nom} est prêt${c.sexe === 'jument' ? 'e' : ''} : tu peux monter`, 'or'); }
+      sonPiece(); sauver();
+    }
+    if (!$('#voile').hidden) panneauPoste();
+  }, 2000);
+  panneauPoste();
+}
+function finirPoste() {
+  posteActif = null; if (effetsLavage) { effetsLavage.jet.visible = false; effetsLavage.mousse.visible = false; }
+}
+function majPoste(r, dt) { // le cheval attaché ne bouge plus ; effets de l'eau et de la mousse
+  const P = posteActif, pl = P.place; r.x = pl.x; r.z = pl.z; r.rot = pl.rot; r.vit = 0;
+  r.m.g.position.set(r.x, 0, r.z); r.m.g.rotation.y = r.rot; animer(r.m, 0, 0, false, dt);
+  if (P.type !== 'lavage' || !effetsLavage) return;
+  const { jet, mousse } = effetsLavage;
+  if (P.effetType === 'mousse' && P.effet > 0) P.mousseVue = true;
+  if (P.effetType === 'jet' && P.effet > 0 && P.faites >= 2) P.mousseVue = false;
+  mousse.visible = !!P.mousseVue; mousse.position.set(r.x, 0, r.z); mousse.rotation.y = r.rot;
+  jet.visible = P.effet > 0 && P.effetType === 'jet';
+  if (jet.visible) { // de la main du joueur au flanc du cheval
+    const a = new THREE.Vector3(J.x, 1.1, J.z), b = new THREE.Vector3(r.x + rand(-0.3, 0.3), 1.3 + rand(-0.1, 0.1), r.z + rand(-0.4, 0.4)), d = b.clone().sub(a);
+    jet.position.copy(a).add(b).multiplyScalar(0.5); jet.scale.set(1, d.length(), 1); jet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  }
+}
 function construireCuisiniere() {
   if (cuisiniere) scene.remove(cuisiniere.g);
   cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
@@ -1741,6 +1858,8 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (Math.abs(x - LAVAGE.x) < 7 && Math.abs(z - LAVAGE.z) < 7) return false;
+  if (Math.abs(x - SELLAGE.x) < 5 && Math.abs(z - SELLAGE.z) < 4) return false;
   if (x > DORT.x1 - 5 && x < DORT.x2 + 5 && z > DORT.z1 - 4 && z < DORT.z2 + 5) return false;
   if (Math.abs(x - VENTE.x) < 13 && Math.abs(z - VENTE.z) < 11) return false;
   if (Math.abs(x - CANTINE.x) < 9 && Math.abs(z - CANTINE.z) < 8) return false;
@@ -1937,8 +2056,8 @@ function hautCou(y) { // demi-épaisseur de l'encolure à la hauteur y, pour pos
 
 // spec : { robe, taille, race, crin, equip } — un cheval de l'écurie, ou un cheval sauvage
 // spec : { robe, taille, race, crin, equip } — un cheval de l'écurie, ou un cheval sauvage
-function modeleCheval(spec, monte, tenueForcee = null) {
-  if (REEL.pret) return modeleReel(spec, monte, tenueForcee);
+function modeleCheval(spec, monte, tenueForcee = null, avecCavalier = true) { // avecCavalier = false : sellé, personne dessus
+  if (REEL.pret) return modeleReel(spec, monte, tenueForcee, avecCavalier);
   const r = ROBES[spec.robe] || ROBES.bai, race = RACES[spec.race] || {}, f = race.forme || {};
   const taille = spec.taille || 1, larg = f.largeur || 1, lj = f.jambes || 1, lc = f.crinLong ? 1.8 : 1;
   const crin = spec.crin ?? race.crin ?? r.crin;
@@ -2044,7 +2163,7 @@ function modeleCheval(spec, monte, tenueForcee = null) {
     harnacher(corps, tete, e);
     // cavalière, assise, jambes de part et d'autre ; garde sa taille sur un petit poney
     const k = taille < 0.9 ? Math.pow(1 / taille, 0.7) : 1;
-    cavalier = poserCavalier(corps, new THREE.Vector3(0, 1.66, 0.05), tenueForcee || etat?.tenue || {}, k, larg);
+    if (avecCavalier) cavalier = poserCavalier(corps, new THREE.Vector3(0, 1.66, 0.05), tenueForcee || etat?.tenue || {}, k, larg);
   }
   if (!monte && COUVERTURES[spec.couverture]) couvrir(corps, spec.couverture, couleurCouv(spec));
   if (!monte && LICOLS[spec.licol]) { // licol : muserolle et têtière de couleur
@@ -2090,6 +2209,57 @@ function couvrir(corps, k, teinte) {
   for (const zz of [-L / 2, L / 2]) { const t = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 6, 28, 2 * a), liseré); t.rotation.z = Math.PI / 2 - a; t.position.z = zz; g.add(t); }
   ovo(R * 0.9, R * 0.85, 0.035, robeMat(0x2b2f33, 0.6), 0, -0.08, L / 2 + 0.06, g); // sangle de poitrail
 }
+// ---- Vraies selles (2026-11-01) : surfaces modelées dans le repère du cheval dessiné (dos à 1,645 m, tronc ≈ cercle de
+// 0,37 m centré à 1,27 m de haut). Siège creusé entre troussequin et pommeau, quartiers qui suivent les flancs (plus ou
+// moins avancés selon la selle), taquets, tapis qui épouse le dos, étrivières et étriers en métal (là où la cavalière
+// pose les pieds : environ 0,35 m de côté, 1 m de haut), sangle.
+const FORMES_SELLE = {
+  mixte:     { siege: 0.10, trous: 0.09, pomm: 0.07, larg: 0.15, phi: 1.32, avance: 0.10, taquet: 0.5, tapis: 1.08, long: 0.56 },
+  obstacle:  { siege: 0.06, trous: 0.06, pomm: 0.05, larg: 0.15, phi: 1.28, avance: 0.20, taquet: 1, tapis: 1.05, long: 0.54 },
+  dressage:  { siege: 0.14, trous: 0.13, pomm: 0.08, larg: 0.14, phi: 1.55, avance: 0.02, taquet: 0.4, tapis: 1.3, long: 0.58 },
+  course:    { siege: 0.03, trous: 0.03, pomm: 0.03, larg: 0.12, phi: 1.05, avance: 0.12, taquet: 0, tapis: 0.9, long: 0.42 },
+  randonnee: { siege: 0.15, trous: 0.15, pomm: 0.12, larg: 0.17, phi: 1.45, avance: 0.05, taquet: 0.3, tapis: 1.2, long: 0.64, sacoches: true },
+};
+const matsDoubles = new Map();
+const deuxFaces = m => { if (!matsDoubles.has(m)) { const d = m.clone(); d.side = THREE.DoubleSide; matsDoubles.set(m, d); } return matsDoubles.get(m); };
+function surface(fn, nu, nv, mat, parent) { // fn(u, v) avec u, v dans [0, 1] → [x, y, z]
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const [x, y, z] = fn(i / nu, j / nv); pos.push(x, y, z); uv.push(i / nu, j / nv); }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, deuxFaces(mat)); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+const metalEtrier = new THREE.MeshStandardMaterial({ color: 0xc9ced3, roughness: 0.25, metalness: 0.9 });
+function selleRealiste(corps, e, cuir, tissu) {
+  const F = FORMES_SELLE[e.selle] || FORMES_SELLE.mixte, zc = 0.06, cy = 1.27, R = 0.375, L = F.long;
+  const surCorps = (phi, z, r = R) => [Math.sin(phi) * r, cy + Math.cos(phi) * r, z];
+  // tapis : de l'épine aux flancs, des deux côtés, un peu plus long que la selle
+  surface((u, v) => { const phi = (v * 2 - 1) * F.tapis, z = zc - L * 0.62 + u * L * 1.2 + Math.abs(phi) * 0.04; return surCorps(phi, z, R + 0.006); }, 14, 24, tissu, corps);
+  // siège : creusé, relevé au troussequin (arrière) et au pommeau (avant), arrondi sur le dos
+  const siege = (u, v) => {
+    const vv = v * 2 - 1, w = F.larg * (0.75 + 0.35 * Math.sin(Math.PI * Math.min(1, u * 1.1))), z = zc - L / 2 + u * L;
+    const prof = F.trous * Math.max(0, 1 - u / 0.22) ** 2 + F.pomm * Math.max(0, (u - 0.8) / 0.2) ** 2 + F.siege * 0.25 * Math.sin(Math.PI * u) * -1;
+    return [vv * w, 1.645 + 0.045 + prof + F.siege * 0.25 - 0.13 * vv * vv, z];
+  };
+  surface(siege, 16, 10, cuir, corps);
+  // panneaux sous le siège (le cuir épais posé sur le tapis)
+  surface((u, v) => { const phi = (v * 2 - 1) * 0.55, z = zc - L / 2 + u * L * 0.95; return surCorps(phi, z, R + 0.03); }, 10, 10, cuir, corps);
+  for (const s of [1, -1]) {
+    // quartier : grand rabat de cuir qui suit le flanc, avancé pour l'obstacle, long et droit pour le dressage
+    surface((u, v) => { const phi = 0.5 + v * (F.phi - 0.5), z = zc - 0.13 + u * 0.36 + F.avance * v * 0.55 - 0.05 * (1 - u) * v; const [x, y] = surCorps(phi, z, R + 0.035); return [s * x, y, z]; }, 8, 12, cuir, corps);
+    // taquet (bourrelet devant le genou)
+    if (F.taquet) { const phi = 0.75 + (F.phi - 0.75) * 0.35, [x, y] = surCorps(phi, 0, R + 0.06); const t = ovo(0.035, 0.11 * F.taquet + 0.04, 0.035, cuir, s * x, y, zc + 0.2 + F.avance * 0.35, corps); t.rotation.x = -0.35 - F.avance; t.rotation.z = s * -0.5; }
+    // étrivière et étrier : du porte-étrivière, sous le pommeau, jusqu'au pied de la cavalière
+    const haut = new THREE.Vector3(s * 0.27, 1.6, zc + 0.15), bas = new THREE.Vector3(s * 0.4, 1.04, zc + 0.11);
+    const d = bas.clone().sub(haut), etr = bloc(0.035, d.length(), 0.008, cuir, (haut.x + bas.x) / 2, (haut.y + bas.y) / 2, (haut.z + bas.z) / 2, corps);
+    etr.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
+    const etrier = new THREE.Group(); etrier.position.copy(bas); etrier.rotation.z = s * 0.15; corps.add(etrier);
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.008, 6, 20), metalEtrier); arc.scale.set(1, 1.25, 1); arc.rotation.y = Math.PI / 2; arc.position.y = -0.065; etrier.add(arc); // l'arche, vue de profil
+    bloc(0.11, 0.012, 0.05, metalEtrier, 0, -0.13, 0, etrier); // la grille où se pose le pied
+  }
+  if (F.sacoches) for (const s of [1, -1]) ovo(0.06, 0.13, 0.12, cuir, s * 0.3, 1.55, zc - 0.36, corps);
+}
 // Selle, tapis, sangle et bride, selon le modèle de selle et les couleurs choisies (sans tête : pas de bride)
 function harnacher(corps, tete, e, sangle = true) {
   const cuir = robeMat(e.cSelle, 0.45), tissu = matTapis(e.cTapis, e.tapis || 'uni'), bride = robeMat(e.cBride, 0.6);
@@ -2103,33 +2273,7 @@ function harnacher(corps, tete, e, sangle = true) {
     maille(cylGeo(0.025, 0.03, 0.14, 10), cuir, 0, 1.82, 0.32, corps);
     ovo(0.055, 0.02, 0.055, cuir, 0, 1.89, 0.32, corps);   // corne
     for (const s of [1, -1]) ovo(0.025, 0.26, 0.11, cuir, s * 0.37, 1.42, 0.08, corps); // fenders
-  } else if (e.selle === 'dressage') {
-    ovo(0.375, 0.03, 0.35, tissu, 0, 1.62, 0.06, corps);
-    ovo(0.25, 0.08, 0.3, cuir, 0, 1.67, 0.07, corps);
-    ovo(0.19, 0.11, 0.06, cuir, 0, 1.74, -0.18, corps);
-    ovo(0.17, 0.08, 0.06, cuir, 0, 1.71, 0.3, corps);
-    for (const s of [1, -1]) ovo(0.025, 0.25, 0.12, cuir, s * 0.36, 1.45, 0.12, corps); // longs quartiers
-  } else if (e.selle === 'course') {
-    ovo(0.31, 0.025, 0.26, tissu, 0, 1.625, 0.16, corps);
-    ovo(0.18, 0.045, 0.2, cuir, 0, 1.655, 0.16, corps);
-    for (const s of [1, -1]) ovo(0.02, 0.12, 0.1, cuir, s * 0.34, 1.55, 0.2, corps);
-  } else if (e.selle === 'obstacle') {
-    ovo(0.35, 0.035, 0.34, tissu, 0, 1.625, 0.1, corps);
-    ovo(0.25, 0.06, 0.28, cuir, 0, 1.655, 0.09, corps);
-    ovo(0.19, 0.065, 0.05, cuir, 0, 1.7, -0.14, corps);
-    for (const s of [1, -1]) { ovo(0.025, 0.16, 0.17, cuir, s * 0.355, 1.5, 0.25, corps); ovo(0.045, 0.11, 0.05, cuir, s * 0.375, 1.52, 0.36, corps); } // quartiers très avancés, taquets
-  } else if (e.selle === 'randonnee') {
-    ovo(0.4, 0.05, 0.42, tissu, 0, 1.62, 0.04, corps);
-    ovo(0.27, 0.09, 0.31, cuir, 0, 1.68, 0.06, corps);
-    ovo(0.2, 0.12, 0.07, cuir, 0, 1.75, -0.21, corps);
-    ovo(0.15, 0.1, 0.07, cuir, 0, 1.73, 0.3, corps);
-    for (const s of [1, -1]) { ovo(0.025, 0.22, 0.14, cuir, s * 0.37, 1.47, 0.1, corps); ovo(0.07, 0.13, 0.11, cuir, s * 0.27, 1.6, -0.36, corps); } // sacoches
-  } else {
-    ovo(0.36, 0.035, 0.36, tissu, 0, 1.625, 0.08, corps);
-    ovo(0.26, 0.07, 0.3, cuir, 0, 1.66, 0.07, corps);
-    ovo(0.2, 0.08, 0.06, cuir, 0, 1.71, -0.17, corps);
-    for (const s of [1, -1]) ovo(0.025, 0.17, 0.14, cuir, s * 0.355, 1.5, 0.2, corps); // quartiers avancés, pour sauter
-  }
+  } else selleRealiste(corps, e, cuir, tissu);
   if (!tete) return;
   maille(geoMors, bride, 0, -0.03, 0.5, tete).scale.set(0.8, 0.95, 1);       // muserolle
   maille(geoMors, bride, 0, 0.0, 0.02, tete).scale.set(1.25, 1.85, 1);       // têtière
@@ -2291,7 +2435,7 @@ function matCuirReel(c, quoi) {
   m.color.setRGB(clamp(voulu.r / ref.r, 0, 3), clamp(voulu.g / ref.g, 0, 3), clamp(voulu.b / ref.b, 0, 3));
   return cuirsReels[cle] = m;
 }
-function modeleReel(spec, monte, tenueForcee) {
+function modeleReel(spec, monte, tenueForcee, avecCavalier = true) {
   const r = ROBES[spec.robe] || ROBES.bai, race = RACES[spec.race] || {}, f = race.forme || {};
   const taille = spec.taille || 1, larg = f.largeur || 1;
   const crin = spec.crin ?? race.crin ?? r.crin, e = monte ? equipement(spec) : null;
@@ -2324,7 +2468,7 @@ function modeleReel(spec, monte, tenueForcee) {
       harnacher(h, null, e, false); largeur.add(h); siege.add(largeur);
     }
     const k = taille < 0.9 ? Math.pow(1 / taille, 0.7) : 1;
-    m.cavalier = poserCavalier(siege, new THREE.Vector3(0, e.selle === 'western' ? 0.08 : 0.0, 0), tenueForcee || etat?.tenue || {}, k, larg);
+    if (avecCavalier) m.cavalier = poserCavalier(siege, new THREE.Vector3(0, e.selle === 'western' ? 0.08 : 0.0, 0), tenueForcee || etat?.tenue || {}, k, larg);
     if (e.cBandes != null) for (const nom of OS_CANONS) {
       const C = REEL.canons[nom], b = os[nom]; if (!C || !b) continue;
       const w = new THREE.Mesh(cylGeo(1, 1, 1, 16), robeMat(e.cBandes, 0.9));
@@ -2818,7 +2962,7 @@ function majResidents() {
   plaquesBox.forEach((p, i) => { if (p) scene.remove(p); plaquesBox[i] = null; });
   const meneId = mene?.cheval.id;
   residents = etat.chevaux.filter(c => (etat.aPied || c.id !== etat.actif) && c.lieu !== 'van' && c.lieu !== 'vente').map(c => {
-    const m = modeleCheval(c, false);
+    const m = modeleCheval(c, !!c.sellee, null, false); // sellé à la barre d'attache : on voit sa selle
     let r;
     if (c.lieu === 'box') { const p = BOX_POS(c.box); r = { cheval: c, m, x: p.x, z: p.z, rot: BOX_ROT(c.box), vit: 0, box: true, t: rand(0, 20) }; }
     else {
@@ -2878,6 +3022,7 @@ function contourner(a, b) {
 function majResident(r, dt) {
   const c = r.cheval;
   if (longe && longe.id === c.id) { majLonge(r, dt); return; }
+  if (posteActif && posteActif.id === c.id) { majPoste(r, dt); return; }
   if (r === mene) {
     // il suit la trace exacte du joueur (il passe donc la barrière par où l'on est passé), à 2,2 m derrière
     const tr = r.trace ||= [];
@@ -3101,7 +3246,7 @@ function descendre() {
   if (!J.auSol) { toast('Attends que ton cheval soit retombé au sol', 'rouge'); return; }
   if (parcours.actif) { toast('Termine le parcours avant de descendre', 'rouge'); return; }
   const c = chevalActif();
-  c.lieu = 'libre'; c.pos = { x: J.x, z: J.z, rot: J.rot };
+  c.lieu = 'libre'; c.pos = { x: J.x, z: J.z, rot: J.rot }; c.sellee = true;
   etat.aPied = true; J.vit = 0;
   if (actifM) { scene.remove(actifM.g); actifM = null; }
   J.x += Math.cos(J.rot) * 1.3; J.z -= Math.sin(J.rot) * 1.3; // pied à terre à gauche, côté montoir
@@ -3254,7 +3399,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [LAVAGE.x - 4.5, LAVAGE.z - 5, LAVAGE.x + 4.5, LAVAGE.z + 5], [SELLAGE.x - 3.5, SELLAGE.z - 1.5, SELLAGE.x + 3.5, SELLAGE.z + 3.5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -3496,7 +3641,7 @@ function comptoir() {
   });
 }
 // prix de rachat d'un cheval par Basile : la moitié du prix de sa race, plus ses progrès
-const prixVente = c => Math.round(((RACES[c.race]?.prix || 120) * 0.5 + 15 * STATS.reduce((t, [k]) => t + c.stats[k].niv, 0)) * (1 + (c.elevage || 0) / 250));
+const prixVente = c => Math.round(((RACES[c.race]?.prix || 120) * 0.5 + 15 * STATS.reduce((t, [k]) => t + c.stats[k].niv, 0)) * (1 + (c.elevage || 0) / 250) * (c.lave === etat?.jour ? 1.05 : 1));
 function vendreCheval(id, bouton) {
   const c = etat.chevaux.find(h => h.id === id); if (!c) return;
   if (etat.chevaux.length < 2) { toast('Garde au moins un cheval !', 'rouge'); return; }
@@ -4169,7 +4314,7 @@ function monter(id) {
   if (r) { if (r.box) { const pp = BOX_PORTE(c.box); if (enGrange(c.box)) { J.x = (GRANGE.x1 + GRANGE.x2) / 2; J.z = pp.z; J.rot = Math.PI; } else { J.x = pp.x; J.z = pp.z + (c.box < BOXES.n ? 1 : -1); J.rot = BOX_ROT(c.box); } } else { J.x = r.x; J.z = r.z; J.rot = r.rot; } }
   if (mene?.cheval.id === id) mene = null;
   c.fugue = null;
-  etat.actif = id; etat.aPied = false; J.vit = 0; J.y = 0; J.vy = 0; J.auSol = true;
+  etat.actif = id; etat.aPied = false; J.vit = 0; J.y = 0; J.vy = 0; J.auSol = true; c.sellee = true; if (posteActif?.id === id) finirPoste();
   construirePieton(); construireActif(); majResidents(); J.endu = enduMax(); camPrete = false;
   toast(`Tu montes ${c.nom}`); sauver();
 }
@@ -4183,7 +4328,7 @@ function toast(t, genre = '') {
 }
 let mini = null;
 function ouvrir(html, mode = '', vue = null) { vueAtelier = vue === 'atelier'; vueCarriere = vue === 'carriere'; vueBatir = vue === 'batir'; if (!vueBatir) modeBatir = null; document.body.classList.toggle('atelier', mode === 'lateral'); $('#voile').className = mode; $('#contenu').innerHTML = html; $('#voile').hidden = false; for (const k in touches) touches[k] = false; }
-function fermer() { if (repereObst) repereObst.visible = false; selObst = null; $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
+function fermer() { if (posteActif) finirPoste(); if (repereObst) repereObst.visible = false; selObst = null; $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
 const ouvert = () => !$('#voile').hidden;
 $('#fermer').onclick = fermer;
 $('#voile').addEventListener('pointerdown', e => { if (e.target.id === 'voile' && !mini) fermer(); });
@@ -5727,6 +5872,8 @@ const interactions = [
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
   { x: VENTE.x + 4, z: VENTE.z + 7, r: 2.8, texte: () => 'Régler les obstacles de la piste des ventes', action: () => panneauObstaclesVente() },
   { x: VENTE.x - 8.6, z: VENTE.z, r: 3.2, texte: () => enchere ? `Vente de ${enchere.c.nom} en cours` : 'Maître Gaspard : vendre un cheval aux enchères', action: () => panneauVente() },
+  { x: LAVAGE.x, z: LAVAGE.z, r: 4.5, texte: () => mene || !etat.aPied ? `Laver ${(mene?.cheval || chevalActif()).nom} à l’aire de lavage` : 'Aire de lavage : amène un cheval', action: () => ouvrirPoste('lavage') },
+  { x: SELLAGE.x, z: SELLAGE.z + 1.5, r: 3.5, texte: () => mene || !etat.aPied ? `Seller ${(mene?.cheval || chevalActif()).nom} à la barre d’attache` : 'Barre d’attache : amène un cheval pour le seller', action: () => ouvrirPoste('sellage') },
   { x: CANTINE.x + 2.6, z: CANTINE.z, r: 3.2, texte: () => 'Cantine : choisir le repas et appeler les enfants', action: () => panneauCantine() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
@@ -6441,7 +6588,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
@@ -6454,7 +6601,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
