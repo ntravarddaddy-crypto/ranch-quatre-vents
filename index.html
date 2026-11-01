@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 11:45";</script>
+<script>window.VERSION_JEU = "2026-11-01 11:56";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -157,7 +157,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 #lecon small{color:var(--texte-doux)}
 .reglage{display:grid;grid-template-columns:26px 1fr;gap:6px 8px;align-items:start;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .reglage > b{font-family:var(--f-titre);font-size:20px;color:var(--or);line-height:1.2}
-.reglage .hauteur{grid-column:2;display:flex;align-items:center;gap:8px}
+.reglage .hauteur{grid-column:2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .reglage .hauteur span{min-width:56px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
 .choix.petit{font-size:12px;padding:3px 9px}
 .conseil.rouge{color:#ff8a75}.conseil.vert{color:var(--vert)}.conseil.or{color:var(--or)}
@@ -2664,10 +2664,31 @@ function obstacle({ x, z, a, h, larg = 3.4, num = 0, defi = false, tronc = false
   obstacles.push(o); return o;
 }
 // les 6 obstacles numérotés de la carrière suivent les réglages du joueur (etat.carriere)
+// placement libre (2026-11-01) : disposition « libre », chaque obstacle garde x, z et son angle a ; 2 à 10 obstacles
+const nbObstCarriere = () => etat.carriere.obstacles.length;
+function liberer() { // passe la disposition actuelle en placement libre, sans rien bouger
+  const cfg = etat.carriere; if (cfg.disposition === 'libre') return;
+  const pos = (DISPOSITIONS[cfg.disposition] || DISPOSITIONS.boucle).pos;
+  cfg.obstacles.forEach((ob, i) => { const q = pos[i] || [70, 0]; ob.x = q[0]; ob.z = q[1]; ob.a ??= Math.PI / 2; });
+  cfg.disposition = 'libre';
+}
+let repereObst = null, selObst = null;
 function reconstruireCarriere() {
   for (let i = obstacles.length - 1; i >= 0; i--) if (obstacles[i].num && !obstacles[i].terrain) { scene.remove(obstacles[i].g); obstacles.splice(i, 1); }
-  const cfg = etat.carriere, pos = (DISPOSITIONS[cfg.disposition] || DISPOSITIONS.boucle).pos;
-  cfg.obstacles.forEach((ob, i) => obstacle({ x: pos[i][0], z: pos[i][1], a: Math.PI / 2, h: ob.h, type: ob.type, num: i + 1 }));
+  const cfg = etat.carriere;
+  if (cfg.disposition !== 'libre' && cfg.obstacles.length > 6) liberer();
+  const pos = (DISPOSITIONS[cfg.disposition] || DISPOSITIONS.boucle).pos;
+  cfg.obstacles.forEach((ob, i) => obstacle(cfg.disposition === 'libre' ? { x: ob.x ?? 70, z: ob.z ?? 0, a: ob.a ?? Math.PI / 2, h: ob.h, type: ob.type, num: i + 1 }
+    : { x: pos[i][0], z: pos[i][1], a: Math.PI / 2, h: ob.h, type: ob.type, num: i + 1 }));
+  if (!repereObst) { repereObst = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1, 16), new THREE.MeshStandardMaterial({ color: 0x2f9e5a, emissive: 0x0f4a22, roughness: 0.4 })); repereObst.rotation.x = Math.PI; scene.add(repereObst); }
+  const o = selObst != null && obstacles.find(x => x.num === selObst + 1 && !x.terrain);
+  repereObst.visible = !!o && vueCarriere; if (o) repereObst.position.set(o.x, Math.max(o.h, 0.6) + 1.8, o.z);
+}
+function placerObstacle(p) { // clic sur la carrière pendant le réglage : l'obstacle choisi y va
+  if (selObst == null || !p) return;
+  const C = CARRIERE; if (p.x < C.x1 + 2 || p.x > C.x2 - 2 || p.z < C.z1 + 2 || p.z > C.z2 - 2) { toast('Pose l’obstacle dans la carrière', 'rouge'); return; }
+  liberer(); const ob = etat.carriere.obstacles[selObst]; ob.x = Math.round(p.x * 2) / 2; ob.z = Math.round(p.z * 2) / 2;
+  reconstruireCarriere(); sauver(); tableauCarriere();
 }
 [[56, -33, 1.3], [70, -33, 1.6], [84, -33, 1.9]].forEach(([x, z, h]) => obstacle({ x, z, a: Math.PI / 2, h, defi: true, larg: 4 }));
 TRONCS.forEach(([x, z, a, h]) => obstacle({ x, z, a, h, tronc: true }));
@@ -3409,17 +3430,44 @@ function vendreCheval(id, bouton) {
 // prixVente : un cheval bien élevé monte donc plus haut). Celui qui enchérit se lève, lève la main et dit son prix.
 // Quand plus personne ne surenchérit : « une fois, deux fois, adjugé ! ».
 let enchere = null;
+// démonstration au saut pendant la vente (2026-11-01) : 0 à 3 obstacles réglables sur la piste (etat.ringVente),
+// posés en travers du tour. Le cheval vendu passe au trot et les saute en liberté ; un saut réussi fait monter le
+// prix que chaque acheteur est prêt à payer, une barre tombée le fait baisser un peu.
+const ANGLES_RING = [Math.PI / 2, -Math.PI / 2, 0];
+let obstRing = [];
+const ringVente = () => etat.ringVente ||= { obstacles: [] };
+function construireRing() {
+  for (const o of obstRing) { scene.remove(o.g); const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); }
+  obstRing = ringVente().obstacles.map((ob, i) => {
+    const t = ANGLES_RING[i], x = VENTE.x + Math.cos(t) * 6.6, z = VENTE.z + Math.sin(t) * 3.4;
+    const dx = -Math.sin(t) * 6.6, dz = Math.cos(t) * 3.4, a = Math.atan2(dz, dx) + Math.PI / 2; // barre en travers du sens de marche
+    const o = obstacle({ x, z, a, h: ob.h, type: ob.type, larg: 2.4, terrain: 'vente' }); o.angle = t; return o;
+  });
+}
 const BRAS_LEVE = { x: -1.5, y: 0, z: 0, av: 0.2 }; // épaule droite (Mixamo) : x négatif lève le bras au-dessus de la tête (essayé le 2026-11-01)
 function panneauVente() {
   if (ouvert()) fermer();
-  if (enchere) { ouvrir(`<div class="pnj">Maître Gaspard</div><h2>Une vente est en cours</h2><p>${enchere.c.nom} est sur la piste.</p>`); return; }
+  if (enchere) { ouvrir(`<div class="pnj">Maître Gaspard</div><h2>Une vente est en cours</h2><p>${enchere.c.nom} est sur la piste. Réponds avec les boutons Oui ou Non en bas de l’écran.</p>`); return; }
   const dispo = etat.chevaux.filter(c => !(c.id === etat.actif && !etat.aPied) && c.lieu !== 'van');
   const fiches = dispo.map(c => `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span><div><h3>${c.nom}</h3><small>${c.race} · ${sexeTexte(c)}${poulain(c) ? ' · poulain' : ''}${c.elevage ? ` · élevage ${c.elevage} %` : ''}</small></div></div>
     ${blocStats(c.stats, false)}<p class="note" style="margin:4px 0">Valeur estimée : <b>${prixVente(c)} pièces</b></p>
     <div class="boutons">${[['basse', 'Mise à prix basse'], ['normale', 'Normale'], ['haute', 'Haute']].map(([k, l]) => `<button class="btn ${k === 'normale' ? 'or' : ''}" data-vendre="${c.id}" data-mise="${k}">${l} · ${Math.round(prixVente(c) * { basse: 0.5, normale: 0.7, haute: 0.95 }[k] / 5) * 5} p.</button>`).join('')}</div></article>`).join('');
+  const rv = ringVente();
+  const lignesRing = rv.obstacles.map((ob, i) => `<div class="reglage"><b>${i + 1}</b><div class="choix-ligne">${['croisillon', 'vertical', 'oxer'].map(k => `<button class="choix petit ${ob.type === k ? 'choisi' : ''}" data-ri="${i}" data-rtype="${k}">${TYPES_OBST[k]}</button>`).join('')}</div>
+    <div class="hauteur"><button class="btn" data-ri="${i}" data-rdh="-1" ${ob.h <= 0.31 ? 'disabled' : ''}>−</button><span>${fr(ob.h, 1)} m</span><button class="btn" data-ri="${i}" data-rdh="1" ${ob.h >= 1.39 ? 'disabled' : ''}>+</button></div></div>`).join('');
+  const blocRing = `<h3 class="section">Démonstration au saut sur la piste</h3>
+    <p class="note">Pendant la vente, le cheval passe au trot et saute ces obstacles. Un beau saut donne envie aux acheteurs de payer plus ; trop haut pour lui, il fait tomber la barre et les prix baissent un peu. Hauteur que ce cheval saute bien : environ 0,7 m + 0,16 m par niveau de Saut.</p>
+    ${lignesRing}<div class="choix-ligne">${rv.obstacles.length < 3 ? '<button class="choix" id="ring-ajout">Ajouter un obstacle</button>' : ''}${rv.obstacles.length ? '<button class="choix" id="ring-retire">Retirer le dernier</button>' : ''}</div>`;
   ouvrir(`<div class="pnj">Maître Gaspard · commissaire-priseur</div><h2>Vendre aux enchères</h2>
     <p>Choisis le cheval et sa mise à prix. Plus elle est haute, moins il y aura d’acheteurs ; trop haute, il peut ne pas trouver preneur. Les acheteurs paient plus cher un cheval bien dressé et bien élevé.</p>
+    ${blocRing}
+    <h3 class="section">Le cheval à vendre</h3>
     ${etat.chevaux.length < 2 ? '<p class="note">Il te faut au moins deux chevaux pour en vendre un.</p>' : `<div class="grille">${fiches}</div>`}`);
+  const refaire = () => { construireRing(); sauver(); const d = $('#panneau').scrollTop; panneauVente(); $('#panneau').scrollTop = d; };
+  $('#contenu').querySelectorAll('[data-rtype]').forEach(b => b.onclick = () => { rv.obstacles[+b.dataset.ri].type = b.dataset.rtype; refaire(); });
+  $('#contenu').querySelectorAll('[data-rdh]').forEach(b => b.onclick = () => { const ob = rv.obstacles[+b.dataset.ri]; ob.h = clamp(Math.round(ob.h * 10 + +b.dataset.rdh) / 10, 0.3, 1.4); refaire(); });
+  const ra = $('#ring-ajout'); if (ra) ra.onclick = () => { rv.obstacles.push({ type: rv.obstacles.length ? 'vertical' : 'croisillon', h: 0.6 }); refaire(); };
+  const rr = $('#ring-retire'); if (rr) rr.onclick = () => { rv.obstacles.pop(); refaire(); };
   $('#contenu').querySelectorAll('[data-vendre]').forEach(b => b.onclick = () => lancerEnchere(etat.chevaux.find(c => c.id === b.dataset.vendre), b.dataset.mise));
 }
 function lancerEnchere(c, mise) {
@@ -3452,10 +3500,20 @@ function majVente(dt) {
   }
   if (gaspard) { if (gaspard.tBulle > 0 && (gaspard.tBulle -= dt) <= 0 && gaspard.bulle) { gaspard.g.remove(gaspard.bulle); gaspard.bulle = null; } marcher(gaspard, 0, dt); }
   const E = enchere; if (!E) return;
-  // le cheval fait le tour de la piste au pas
-  E.ang += dt * 1.4 / 6.2; const x = VENTE.x + Math.cos(E.ang) * 6.6, z = VENTE.z + Math.sin(E.ang) * 3.4;
+  // le cheval fait le tour de la piste : au pas, ou au trot s'il y a des obstacles, qu'il saute en liberté
+  const v = obstRing.length ? 4 : 1.4;
+  E.ang += dt * v / 5.2; const x = VENTE.x + Math.cos(E.ang) * 6.6, z = VENTE.z + Math.sin(E.ang) * 3.4;
   const rot = Math.atan2(-Math.sin(E.ang) * 6.6, Math.cos(E.ang) * 3.4);
-  E.m.g.position.set(x, 0, z); E.m.g.rotation.y = rot; animer(E.m, 1.4, 0, false, dt);
+  const proche = o => { const d = ((o.angle - E.ang) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI; return d; }; // écart d'angle, signé
+  E.tSaut = (E.tSaut || 0) - dt;
+  if (!E.vol && E.tSaut <= 0) for (const o of obstRing) { const d = proche(o); if (d > 0 && d < 0.22) { E.vol = { o, t: 0, duree: 0.75, haut: o.hEff + 0.4 }; E.tSaut = 1.5; break; } }
+  let y = 0, vy = 0;
+  if (E.vol) {
+    const V = E.vol; V.t += dt; const k = clamp(V.t / V.duree, 0, 1); y = 4 * V.haut * k * (1 - k); vy = 4 * V.haut * (1 - 2 * k) / V.duree;
+    if (!V.compte && k >= 0.5) { V.compte = true; sautVente(E, V.o); }
+    if (k >= 1) E.vol = null;
+  }
+  E.m.g.position.set(x, y, z); E.m.g.rotation.y = rot; animer(E.m, v, vy, !!E.vol, dt);
   majChoixEnchere();
   if (E.phase === 'decision' || (E.tic -= dt) > 0) return;
   const candidats = acheteurs.filter(a => a !== E.leader && E.maxi.get(a) >= (E.leader ? E.prix + E.pas : E.prix));
@@ -3475,6 +3533,15 @@ function majVente(dt) {
     else if (E.compte === 2) parler(gaspard, `${E.prix} pièces… deux fois !`);
     else { E.phase = 'decision'; E.tic = 1e9; parler(gaspard, `Dernière offre : ${E.prix} pièces. On vend ?`); }
   }
+}
+function sautVente(E, o) { // le cheval franchit un obstacle de la piste : les acheteurs réagissent
+  const c = E.c, hMax = 0.7 + 0.16 * c.stats.saut.niv, reussi = o.hEff <= hMax - 0.05 || Math.random() < 0.35;
+  const k = reussi ? 1 + 0.04 + 0.08 * o.hEff : 0.96;
+  for (const [a, m] of E.maxi) E.maxi.set(a, Math.round(m * k / 5) * 5);
+  const temoin = pick(acheteurs);
+  if (reussi) { parler(temoin, pick(['Joli saut !', 'Il saute bien !', 'Quelle détente !', 'Superbe !'])); son(620, 0.15, 'triangle', 0.05, 1.5); E.sauts = (E.sauts || 0) + 1; }
+  else { o.tombe = 5; parler(temoin, 'Oh, la barre…'); son(160, 0.25, 'sawtooth', 0.04); }
+  if (E.phase === 'decision') { E.phase = 'enchere'; E.tic = rand(0.6, 1.2); } // un beau saut peut relancer les enchères
 }
 function majChoixEnchere() { // boutons Oui / Non dès qu'il y a une offre ; c'est toi qui décides
   const E = enchere, b = $('#enchere-choix');
@@ -3497,7 +3564,7 @@ function finirEnchere(vendu, refus = false) {
   etat.chevaux.splice(etat.chevaux.indexOf(c), 1); etat.pieces += E.prix; etat.compteurs.encheres = (etat.compteurs.encheres || 0) + 1;
   if (etat.actif === c.id) etat.actif = etat.chevaux[0].id;
   majResidents(); sonPiece(); sauver();
-  toast(`Adjugé ! ${c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces (${E.offres} enchère${E.offres > 1 ? 's' : ''}, valeur estimée ${prixVente(c)})`, 'or');
+  toast(`Adjugé ! ${c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces (${E.offres} enchère${E.offres > 1 ? 's' : ''}${E.sauts ? `, ${E.sauts} beau${E.sauts > 1 ? 'x' : ''} saut${E.sauts > 1 ? 's' : ''}` : ''}, valeur estimée ${prixVente(c)})`, 'or');
 }
 // ---- Ta maison : dormir, et l'état du ranch en un coup d'œil
 function panneauMaison() {
@@ -4022,7 +4089,7 @@ function toast(t, genre = '') {
 }
 let mini = null;
 function ouvrir(html, mode = '', vue = null) { vueAtelier = vue === 'atelier'; vueCarriere = vue === 'carriere'; vueBatir = vue === 'batir'; if (!vueBatir) modeBatir = null; document.body.classList.toggle('atelier', mode === 'lateral'); $('#voile').className = mode; $('#contenu').innerHTML = html; $('#voile').hidden = false; for (const k in touches) touches[k] = false; }
-function fermer() { $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
+function fermer() { if (repereObst) repereObst.visible = false; selObst = null; $('#voile').hidden = true; $('#voile').className = ''; vueAtelier = false; vueCarriere = false; vueBatir = false; modeBatir = null; if (apercu) { scene.remove(apercu); apercu = null; } document.body.classList.remove('atelier'); mini = null; camPrete = false; sauver(); }
 const ouvert = () => !$('#voile').hidden;
 $('#fermer').onclick = fermer;
 $('#voile').addEventListener('pointerdown', e => { if (e.target.id === 'voile' && !mini) fermer(); });
@@ -4307,29 +4374,42 @@ function tableauCarriere() {
   const lignes = cfg.obstacles.map((ob, i) => {
     const fixe = ob.type === 'cavalettis' || ob.type === 'sol';
     const types = Object.entries(TYPES_OBST).map(([k, l]) => `<button class="choix petit ${ob.type === k ? 'choisi' : ''}" data-i="${i}" data-type="${k}">${l}</button>`).join('');
-    return `<div class="reglage"><b>${i + 1}</b><div class="choix-ligne">${types}</div>
+    return `<div class="reglage" ${selObst === i ? 'style="outline:2px solid var(--vert);border-radius:8px"' : ''}><b>${i + 1}</b><div class="choix-ligne">${types}</div>
+
       <div class="hauteur"><button class="btn" data-i="${i}" data-dh="-1" ${fixe || ob.h <= 0.31 ? 'disabled' : ''} aria-label="Plus bas">−</button>
       <span>${fr(fixe ? hEff(ob.type, ob.h) : ob.h, fixe ? 2 : 1)} m</span>
       <button class="btn" data-i="${i}" data-dh="1" ${fixe || ob.h >= 1.59 ? 'disabled' : ''} aria-label="Plus haut">+</button>
-      ${ob.type === 'croisillon' ? `<small>${fr(hEff(ob.type, ob.h), 2)} m au centre</small>` : ''}</div></div>`;
+      ${ob.type === 'croisillon' ? `<small>${fr(hEff(ob.type, ob.h), 2)} m au centre</small>` : ''}
+      <button class="choix petit ${selObst === i ? 'choisi' : ''}" data-dep="${i}">${selObst === i ? 'Touche la carrière' : 'Déplacer'}</button><button class="choix petit" data-tourne="${i}">Tourner</button>${cfg.obstacles.length > 2 ? `<button class="choix petit" data-retire="${i}">Retirer</button>` : ''}</div></div>`;
   }).join('');
   const defile = $('#panneau').scrollTop;
   ouvrir(`<div class="pnj">Carrière · matériel</div><h2>Régler les obstacles</h2>
     <p>Choisis la disposition, puis le type et la hauteur de chaque obstacle. Cavalettis et barres au sol se passent au trot sans sauter. Les quêtes « Sans faute » et « Champion » demandent des obstacles d’au moins 0,5 m.</p>
-    <h3 class="section">Disposition</h3><div class="choix-ligne">${disp}</div>
+    <h3 class="section">Démonstration</h3><p class="note">Saute ton parcours devant le public de la tribune : chaque saut réussi est applaudi et le public te donne des pièces.</p>
+    <div class="choix-ligne"><button class="choix" id="demo">Faire une démonstration</button></div>
+    <h3 class="section">Disposition</h3><div class="choix-ligne">${disp}${cfg.disposition === 'libre' ? '<button class="choix choisi">Placement libre</button>' : ''}</div>
+    <p class="note">Pour placer un obstacle où tu veux : « Déplacer », puis touche la carrière. « Tourner » le fait pivoter.</p>
     <h3 class="section">Tout régler d’un coup</h3><div class="choix-ligne"><button class="choix" data-preset="debutant">Débutant</button><button class="choix" data-preset="normal">Normal</button><button class="choix" data-preset="difficile">Difficile</button></div>
-    <h3 class="section">Obstacles</h3>${lignes}`, 'lateral', 'carriere');
+    <h3 class="section">Obstacles · ${cfg.obstacles.length}</h3>${lignes}
+    ${cfg.obstacles.length < 10 ? '<div class="choix-ligne"><button class="choix" id="ajout-obst">Ajouter un obstacle</button></div>' : ''}`, 'lateral', 'carriere');
   $('#panneau').scrollTop = defile;
   const appliquer = () => { reconstruireCarriere(); sauver(); tableauCarriere(); };
   const tous = s => $('#contenu').querySelectorAll(s);
-  tous('[data-disp]').forEach(b => b.onclick = () => { cfg.disposition = b.dataset.disp; appliquer(); });
+  tous('[data-disp]').forEach(b => b.onclick = () => { if (cfg.obstacles.length > 6) cfg.obstacles.length = 6; cfg.disposition = b.dataset.disp; selObst = null; appliquer(); });
+  tous('[data-dep]').forEach(b => b.onclick = () => { selObst = selObst === +b.dataset.dep ? null : +b.dataset.dep; appliquer(); });
+  tous('[data-tourne]').forEach(b => b.onclick = () => { liberer(); const ob = cfg.obstacles[+b.dataset.tourne]; ob.a = ((ob.a ?? Math.PI / 2) + Math.PI / 4) % (Math.PI * 2); appliquer(); });
+  tous('[data-retire]').forEach(b => b.onclick = () => { liberer(); cfg.obstacles.splice(+b.dataset.retire, 1); selObst = null; appliquer(); });
+  const aj = $('#ajout-obst'); if (aj) aj.onclick = () => { liberer(); cfg.obstacles.push({ type: 'vertical', h: 0.6, x: 70, z: 0, a: Math.PI / 2 }); selObst = cfg.obstacles.length - 1; appliquer(); toast('Nouvel obstacle au centre : touche la carrière pour le placer'); };
+  $('#demo').onclick = () => lancerDemo();
   tous('[data-type]').forEach(b => b.onclick = () => { cfg.obstacles[+b.dataset.i].type = b.dataset.type; appliquer(); });
   tous('[data-dh]').forEach(b => b.onclick = () => { const ob = cfg.obstacles[+b.dataset.i]; ob.h = clamp(Math.round(ob.h * 10 + +b.dataset.dh) / 10, 0.3, 1.6); appliquer(); });
   tous('[data-preset]').forEach(b => b.onclick = () => {
     const p = { debutant: [['croisillon', 0.6], ['cavalettis', 0.3], ['vertical', 0.4], ['croisillon', 0.7], ['sol', 0.3], ['vertical', 0.5]],
       normal: [['vertical', 0.6], ['oxer', 0.7], ['vertical', 0.8], ['croisillon', 1.0], ['oxer', 0.9], ['vertical', 1.0]],
       difficile: [['oxer', 1.0], ['vertical', 1.1], ['mur', 1.1], ['oxer', 1.2], ['vertical', 1.3], ['oxer', 1.3]] }[b.dataset.preset];
-    cfg.obstacles = p.map(([type, h]) => ({ type, h })); appliquer();
+    if (cfg.disposition === 'libre') cfg.obstacles = p.map(([type, h], i) => ({ ...(cfg.obstacles[i] || { x: 70, z: 0, a: Math.PI / 2 }), type, h }));
+    else cfg.obstacles = p.map(([type, h]) => ({ type, h }));
+    appliquer();
   });
 }
 
@@ -5358,16 +5438,50 @@ function apprivoiser(s) {
 }
 
 // ---- Parcours d'obstacles en carrière
-const parcours = { actif: false, prochain: 1, t: 0, fautes: 0, affiche: 0, terrain: 'carriere' };
+const parcours = { actif: false, prochain: 1, t: 0, fautes: 0, affiche: 0, terrain: 'carriere', demo: false, dons: 0 };
 function remettreBarres() { for (const o of obstacles) if (o.barre) { o.tombe = 0; o.barre.position.set(0, o.barreY, 0); o.barre.rotation.set(0, 0, 0); } }
+// ---- Démonstration de saut (2026-11-01) : le parcours de la carrière devant le public de la tribune. Chaque saut
+// réussi est applaudi (bulles « Bravo ! », bruit d'applaudissements) et rapporte des dons ; une barre tombée fait « Oooh ».
+// Dons pleins une fois par jour (etat.demoJour), moitié ensuite.
+const publicCarriere = () => spectateurs.filter(s => Math.abs(s.z - 22) < 3 && s.x > 54 && s.x < 86);
+function applaudir(fort = 1) {
+  try {
+    ac ||= new AudioContext();
+    const n = Math.floor(ac.sampleRate * (0.6 + fort * 0.8)), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) { const t = i / ac.sampleRate, claque = Math.max(0, Math.sin(t * 2 * Math.PI * (9 + 5 * Math.sin(t * 3)))) ** 8; d[i] = (Math.random() * 2 - 1) * (0.25 + 0.75 * claque) * Math.min(1, (n - i) / (ac.sampleRate * 0.4)); }
+    const src = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 0.6;
+    g.gain.value = 0.08 * fort; src.buffer = buf; src.connect(f).connect(g).connect(ac.destination); src.start();
+  } catch { /* pas de son */ }
+}
+function bulleSpectateur(sp, texte) {
+  if (sp.bulle) sp.p.g.remove(sp.bulle);
+  const b = etiquette(texte, '#2f1f13', '#fbf1dc', 0.45); b.position.y = 2.4; sp.p.g.add(b); sp.bulle = b;
+  setTimeout(() => { if (sp.bulle === b) { sp.p.g.remove(b); sp.bulle = null; } }, 2200);
+}
+function reactionPublic(ok, h) {
+  if (!parcours.demo) return;
+  const pub = publicCarriere();
+  if (ok) {
+    const don = Math.round((6 + h * 14) * (etat.demoJour === etat.jour ? 0.5 : 1)); parcours.dons += don;
+    for (const sp of pub) if (Math.random() < 0.45) bulleSpectateur(sp, pick(['Bravo !', 'Superbe !', 'Quel saut !', 'Ouais !', 'Magnifique !']));
+    applaudir(0.6 + h * 0.4); toast(`Le public applaudit : +${don} pièces`, 'or');
+  } else { for (const sp of pub) if (Math.random() < 0.35) bulleSpectateur(sp, 'Oooh…'); }
+}
+function lancerDemo() {
+  if (etat.aPied) { toast('Monte à cheval pour faire ta démonstration', 'rouge'); return; }
+  if (parcours.actif || concours) { toast('Un parcours ou un concours est déjà en cours', 'rouge'); return; }
+  fermer(); parcours.demo = true; parcours.dons = 0;
+  for (const sp of publicCarriere()) if (Math.random() < 0.5) bulleSpectateur(sp, pick(['Allez !', 'On t’encourage !', 'Vas-y !']));
+  toast('Démonstration : va au drapeau de départ, appuie sur E, puis saute tes obstacles dans l’ordre', 'or');
+}
 function basculerParcours(terrain = 'carriere') {
-  if (parcours.actif) { parcours.actif = false; toast('Parcours abandonné'); if (concours?.attenteJoueur) joueurAFini(0, 0, true); return; }
+  if (parcours.actif) { parcours.actif = false; parcours.demo = false; toast('Parcours abandonné'); if (concours?.attenteJoueur) joueurAFini(0, 0, true); return; }
   if (concours && !concours.attenteJoueur) { toast('Un concours est en cours : attends ton tour', 'rouge'); return; }
   if (concours?.attenteJoueur && concours.terrain !== terrain) { toast('Ton tour se court sur l’autre terrain', 'rouge'); return; }
   if (etat.aPied) { toast('Monte à cheval pour prendre le départ (touche M)', 'rouge'); return; }
   remettreBarres();
   Object.assign(parcours, { actif: true, prochain: 1, t: 0, fautes: 0, affiche: 0, terrain });
-  toast('Parcours lancé ! Saute les obstacles de 1 à 6 dans l’ordre', 'or');
+  toast(`${parcours.demo ? 'Démonstration' : 'Parcours'} lancé${parcours.demo ? 'e' : ''} ! Saute les obstacles de 1 à ${terrain === 'carriere' ? nbObstCarriere() : 6} dans l’ordre`, 'or');
   son(440, 0.15, 'square', 0.04); setTimeout(() => son(880, 0.25, 'square', 0.04), 180);
 }
 function finirParcours() {
@@ -5376,6 +5490,14 @@ function finirParcours() {
     const total = parcours.t + parcours.fautes * 4; parcours.affiche = 6;
     $('#chrono').innerHTML = `${fr(total)} s<small>${parcours.fautes ? `${parcours.fautes} faute${parcours.fautes > 1 ? 's' : ''}` : 'sans faute'} · au classement du concours</small>`;
     sonPiece(); joueurAFini(total, parcours.fautes); return;
+  }
+  if (parcours.demo) { // fin de la démonstration : ovation et dons du public
+    parcours.demo = false; const sf0 = parcours.fautes === 0, bonus = sf0 ? Math.round(30 * (etat.demoJour === etat.jour ? 0.5 : 1)) : 0, dons = parcours.dons + bonus;
+    etat.pieces += dons; etat.demoJour = etat.jour; etat.compteurs.demos = (etat.compteurs.demos || 0) + 1; parcours.affiche = 6;
+    for (const sp of publicCarriere()) bulleSpectateur(sp, pick(['Bravo !', 'Encore !', 'Génial !', 'Waouh !']));
+    applaudir(1.6); setTimeout(() => applaudir(1.2), 900); sonPiece();
+    $('#chrono').innerHTML = `Démonstration finie<small>${sf0 ? 'sans faute' : `${parcours.fautes} faute${parcours.fautes > 1 ? 's' : ''}`} · le public t’offre ${dons} pièces</small>`;
+    toast(`Ovation du public ! ${sf0 ? 'Sans faute : ' : ''}${dons} pièces de dons`, 'or'); sauver(); return;
   }
   const total = parcours.t + parcours.fautes * 4, sf = parcours.fautes === 0;
   // le gain suit la difficulté réglée ; un parcours trop bas ne compte pas pour les quêtes ni le record
@@ -5676,6 +5798,7 @@ cv.addEventListener('pointermove', e => {
 cv.addEventListener('pointerup', e => {
   glisse = null;
   if (vueBatir && appui && Math.hypot(e.clientX - appui.x, e.clientY - appui.y) < 6) cliquerBatir(pointSol(e));
+  else if (vueCarriere && selObst != null && appui && Math.hypot(e.clientX - appui.x, e.clientY - appui.y) < 6) placerObstacle(pointSol(e));
   appui = null;
 });
 cv.addEventListener('pointercancel', () => { glisse = null; });
@@ -5729,8 +5852,9 @@ function franchir(p0x, p0z) {
     }
     if (parcours.actif && o.num === parcours.prochain && (o.terrain || 'carriere') === parcours.terrain) {
       if (!ok) parcours.fautes++;
+      if (!o.terrain) reactionPublic(ok && !bas, o.hEff);
       parcours.prochain++;
-      if (parcours.prochain > 6) finirParcours();
+      if (parcours.prochain > (parcours.terrain === 'carriere' ? nbObstCarriere() : 6)) finirParcours();
     }
   }
 }
@@ -6044,7 +6168,7 @@ function majHud(dt) {
     $('#lecon').querySelectorAll('[data-ordre]').forEach(b => b.classList.toggle('on', b.dataset.ordre === Lc.allure || (b.dataset.ordre === 'saut' && Lc.veutSauter)));
   }
   const ch = $('#chrono');
-  if (parcours.actif) { ch.hidden = false; ch.innerHTML = `${fr(parcours.t)} s<small>prochain obstacle : ${parcours.prochain} · fautes : ${parcours.fautes}</small>`; }
+  if (parcours.actif) { ch.hidden = false; ch.innerHTML = `${parcours.demo ? 'Démonstration · ' : ''}${fr(parcours.t)} s<small>prochain obstacle : ${parcours.prochain} sur ${parcours.terrain === 'carriere' ? nbObstCarriere() : 6} · fautes : ${parcours.fautes}${parcours.demo ? ` · dons : ${parcours.dons} pièces` : ''}</small>`; }
   else if (parcours.affiche > 0) { parcours.affiche -= 0.1; ch.hidden = false; }
   else if (concours) { ch.hidden = false; const K = concours.cav; ch.innerHTML = concours.attenteJoueur ? `Concours · à toi !<small>${etat.aPied ? 'monte à cheval, puis ' : ''}va au départ du parcours et appuie sur E</small>` : K ? `Concours · ${K.F.nom} · ${fr(K.t)} s<small>${K.F.fautes} faute${K.F.fautes > 1 ? 's' : ''} · concurrent ${concours.i + 1} sur ${concours.file.length} · V : caméra</small>` : `Concours<small>prochain concurrent… · V : caméra</small>`; }
   else if (balade?.type === 'marche') { ch.hidden = false; ch.innerHTML = `Sortie au marché<small>${balade.auMarche ? 'ramène les enfants au ranch' : 'la route vers l’est, puis le sud'} · descendre arrête la sortie</small>`; }
@@ -6109,7 +6233,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
