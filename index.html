@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 15:23";</script>
+<script>window.VERSION_JEU = "2026-11-01 18:01";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -240,6 +240,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
     <button id="b-amenager" type="button">Aménager <kbd>B</kbd></button>
     <button id="b-appel-cours" type="button">Cours <kbd>C</kbd></button>
     <button id="b-cantine" type="button">Cantine <kbd>K</kbd></button>
+    <button id="b-invit" type="button">Concours <kbd>J</kbd></button>
     <button id="b-aide" type="button">Aide <kbd>?</kbd></button>
   </nav>
   <div id="chrono" class="carton" hidden></div>
@@ -402,6 +403,15 @@ const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; //
 const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
 const VENTE = { x: 80, z: 47 };                                   // ring des ventes aux enchères (2026-11-01), tribune au nord
 const CANTINE = { x: 54, z: 39 };
+// petits terrains de concours (2026-11-01) : cinq clubs autour du ranch, chacun son niveau ; on y part sur invitation
+const LIEUX_CONCOURS = {
+  lilas:   { nom: 'Poney-club des Lilas',   x1: 120, x2: 150, z1: -62, z2: -40, h: 0.6, niv: [2, 6],   couleur: 0xb06ad9, texte: 'Petit concours pour débutants' },
+  moulin:  { nom: 'Écurie du Moulin',       x1: -172, x2: -142, z1: 4, z2: 26,  h: 0.8, niv: [4, 8],   couleur: 0x2f9e5a, texte: 'Concours Club' },
+  jardins: { nom: 'Ranch des Jardins',      x1: -42, x2: -12, z1: 140, z2: 162, h: 0.9, niv: [5, 10],  couleur: 0xe67e22, texte: 'Concours Club plus, au milieu des massifs de fleurs', fleurs: true },
+  source:  { nom: 'Haras de la Source',     x1: 60, x2: 90, z1: -162, z2: -140, h: 1.0, niv: [7, 11],  couleur: 0x2f6fb5, texte: 'Concours Amateur' },
+  etoiles: { nom: 'Écurie des Étoiles',     x1: 95, x2: 125, z1: 150, z2: 172,  h: 1.2, niv: [10, 14], couleur: 0xf3b52d, texte: 'Grand concours Élite' },
+};
+const departLieu = L => ({ x: L.x1 + 2.5, z: L.z1 + 6 });
 // carré de dressage (2026-11-01) : 20 × 40 m à l'ouest du paddock de reproduction, A au sud (entrée), C au nord
 const CARRE = { x1: -100, x2: -80, z1: -12, z2: 28 };
 const LAVAGE = { x: 40, z: 37 };   // aire de lavage des chevaux, à la place de l'ancien gîte (2026-11-01)
@@ -1891,6 +1901,88 @@ function finirDressageCarre(arrete) {
     <div class="boutons"><button class="btn or" id="dr-encore">Choisir une autre figure</button></div>`);
   $('#dr-encore').onclick = () => panneauDressage();
 }
+let lieuxConstruits = false;
+function construireLieux() { // sable, lices blanches avec une entrée à l'ouest, 5 obstacles numérotés, banc, banderole, drapeau
+  if (lieuxConstruits) return; lieuxConstruits = true;
+  for (const [k, L] of Object.entries(LIEUX_CONCOURS)) {
+    const n0 = scene.children.length, cx = (L.x1 + L.x2) / 2, cz = (L.z1 + L.z2) / 2, g = new THREE.Group(); scene.add(g);
+    dalle(L.x1, L.z1, L.x2, L.z2, sableMat(5, 4, 0xf0e2c2), 0.03);
+    cloture(L.x1, L.z1, L.x2, L.z1, true, true, g); cloture(L.x2, L.z1, L.x2, L.z2, true, true, g); cloture(L.x2, L.z2, L.x1, L.z2, true, true, g);
+    cloture(L.x1, L.z2, L.x1, L.z1 + 9, true, true, g); cloture(L.x1, L.z1 + 3, L.x1, L.z1, true, true, g); // entrée entre z1 + 3 et z1 + 9
+    for (let k2 = 0; k2 < 2; k2++) { const h = 0.45 + k2 * 0.45; bloc(L.x2 - L.x1 - 6, 0.1, 0.9, MAT.bois, cx, h, L.z2 + 1.6 + k2 * 0.9, g); bloc(L.x2 - L.x1 - 6, h, 0.08, MAT.bois, cx, h / 2, L.z2 + 1.15 + k2 * 0.9, g); }
+    maille(cylGeo(0.05, 0.06, 4, 8), MAT.peint, L.x2 - 1, 2, L.z1 - 1, g);
+    const drap = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), robeMat(L.couleur, 0.7)); drap.position.set(L.x2 - 0.3, 3.5, L.z1 - 1); g.add(drap);
+    if (L.fleurs) for (let i = 0; i < 26; i++) { const t = i / 26, x = L.x1 - 2 + (L.x2 - L.x1 + 4) * t, z0 = i % 2 ? L.z1 - 2.5 : L.z2 + 4.5; ovo(0.5, 0.3, 0.5, robeMat(0x4f8f3a, 0.9), x, 0.25, z0, g); for (let k2 = 0; k2 < 4; k2++) ovo(0.11, 0.1, 0.11, robeMat(pick([0xe8505b, 0xf7e14b, 0xf59ac0, 0xffffff, 0xb06ad9]), 0.6), x + rand(-0.35, 0.35), 0.55, z0 + rand(-0.35, 0.35), g); }
+    fusionner(g);
+    const lab = etiquette(L.nom, '#fbf1dc', `#${new THREE.Color(L.couleur).multiplyScalar(0.75).getHexString()}`, 1.0); lab.position.set(cx, 3.6, L.z2 + 2); scene.add(lab);
+    const types = ['croisillon', 'vertical', 'oxer', 'vertical', 'oxer'];
+    [[L.x1 + 8, L.z1 + 6], [cx + 1, L.z1 + 6], [L.x2 - 6, L.z1 + 6], [L.x2 - 8, L.z2 - 6], [cx - 3, L.z2 - 6]].forEach(([x, z], i) =>
+      obstacle({ x, z, a: Math.PI / 2, h: i === 0 ? Math.max(0.5, L.h - 0.2) : L.h, type: L.h < 0.7 && i === 2 ? 'vertical' : types[i], num: i + 1, terrain: k, larg: 3.2 }));
+    regrouper(n0, cx, cz, 160);
+  }
+}
+// ---- Invitations aux concours (2026-11-01) : elles arrivent au fil des jours, pour toi et pour tes élèves. Tu demandes à
+// chaque enfant s'il veut venir (il répond selon son niveau, son humeur, ce qu'il aime), puis, le jour venu, vous partez
+// au terrain du club (en van : on y est tout de suite) et le concours se court là-bas.
+const mesInvitations = () => etat.invitations ||= [];
+function nouvelleInvitation(dans = null) {
+  const L = Object.keys(LIEUX_CONCOURS), lieu = pick(L);
+  const inv = { id: 'i' + Date.now().toString(36) + Math.floor(Math.random() * 99), lieu, jour: etat.jour + (dans ?? 1 + Math.floor(Math.random() * 3)), reponses: {}, moi: true };
+  mesInvitations().push(inv); return inv;
+}
+function invitationsDuJour() { // à minuit : on retire les anciennes, il en arrive parfois une nouvelle
+  const l = mesInvitations(); for (let i = l.length - 1; i >= 0; i--) if (l[i].jour < etat.jour) l.splice(i, 1);
+  if (l.length < 3 && Math.random() < 0.75) { const inv = nouvelleInvitation(); setTimeout(() => toast(`Invitation : ${LIEUX_CONCOURS[inv.lieu].nom} t’invite au concours du jour ${inv.jour}, toi et tes élèves (bouton Concours, touche J)`, 'or'), 5200); }
+}
+function reponseEnfant(e, inv) {
+  const L = LIEUX_CONCOURS[inv.lieu], hMax = niveauDe(e.niveau || 1).hMax, aimeSaut = hashNom(e.nom) % 10 < 7, f = e.genre === 'f';
+  if (inv.jour >= e.s.depart) return ['non', `Je serai déjà rentré${f ? 'e' : ''} chez moi ce jour-là…`];
+  if (e.s.humeur < 30) return ['non', 'Je n’ai pas trop le moral pour un concours…'];
+  if (L.h > hMax + 0.15) return ['non', `${fr(L.h, 1)} m ? C’est trop haut pour moi pour l’instant !`];
+  if (!aimeSaut && Math.random() < 0.6) return ['non', 'Bof… moi je préfère le dressage.'];
+  return ['oui', pick(['Oh oui, trop bien !', 'Oui ! Je vais tout gagner !', 'Avec plaisir, mon cheval adore sauter !', `Oui… mais j’ai un peu peur !`, 'Trop cool, j’en rêvais !'])];
+}
+function panneauInvitations() {
+  if (ouvert()) fermer();
+  const l = mesInvitations().sort((a, b) => a.jour - b.jour);
+  const enfants = eleves.filter(e => e.p.g.visible || e.etat === 'dort');
+  const cartes = l.map(inv => {
+    const L = LIEUX_CONCOURS[inv.lieu], aujourdhui = inv.jour === etat.jour, oui = Object.entries(inv.reponses).filter(([, r]) => r[0] === 'oui').map(([n]) => n);
+    return `<article class="fiche"><div class="fiche-tete"><span class="robe" style="background:${hex(L.couleur)}"></span><div><h3>${L.nom}</h3><small>${L.texte} · obstacles de ${fr(L.h, 1)} m · ${aujourdhui ? '<b style="color:var(--or)">aujourd’hui !</b>' : `jour ${inv.jour}`}</small></div></div>
+      <label class="choix"><input type="checkbox" data-moi="${inv.id}" ${inv.moi ? 'checked' : ''}> Je participe aussi (avec le cheval que je monte)</label>
+      <h3 class="section">Demander à tes élèves</h3>
+      ${enfants.length ? enfants.map(e => { const r = inv.reponses[e.nom]; return `<div style="margin:4px 0">${r ? `<b>${e.nom}</b> : <span style="color:${r[0] === 'oui' ? 'var(--vert)' : 'var(--rouge)'}">« ${r[1]} »</span>` : `<button class="btn" data-demander="${inv.id}|${e.nom}">Demander à ${e.nom} (niveau ${e.niveau})</button>`}</div>`; }).join('') : '<p class="note">Aucun élève en stage pour l’instant.</p>'}
+      <div class="boutons" style="margin-top:8px">${aujourdhui ? `<button class="btn or gros" data-partir="${inv.id}" ${heureDeCours() ? '' : 'disabled'}>Partir au concours${oui.length ? ` avec ${oui.join(', ')}` : ''}</button>` : `<span class="note">Le jour ${inv.jour}, reviens ici pour partir.</span>`}
+        <button class="btn" data-refuser="${inv.id}">Refuser l’invitation</button></div></article>`;
+  }).join('');
+  ouvrir(`<div class="pnj">Courrier des concours · jour ${etat.jour}</div><h2>Invitations</h2>
+    <p>Les clubs des environs t’invitent, toi et tes élèves. Demande à chacun s’il veut participer ; le jour venu, partez ensemble (inscription : 15 pièces par cavalier).</p>
+    ${cartes || '<p class="note">Pas d’invitation pour le moment : il en arrive presque chaque nuit.</p>'}`);
+  const C = $('#contenu'), trouve = id => mesInvitations().find(x => x.id === id);
+  C.querySelectorAll('[data-moi]').forEach(b => b.onchange = () => { trouve(b.dataset.moi).moi = b.checked; sauver(); });
+  C.querySelectorAll('[data-demander]').forEach(b => b.onclick = () => {
+    const [id, nom] = b.dataset.demander.split('|'), inv = trouve(id), e = eleves.find(x => x.nom === nom); if (!inv || !e) return;
+    inv.reponses[nom] = reponseEnfant(e, inv); e.s.humeur = clamp(e.s.humeur + 2, 0, 100); sauver(); panneauInvitations();
+  });
+  C.querySelectorAll('[data-refuser]').forEach(b => b.onclick = () => { const l2 = mesInvitations(); l2.splice(l2.indexOf(trouve(b.dataset.refuser)), 1); sauver(); panneauInvitations(); });
+  C.querySelectorAll('[data-partir]').forEach(b => b.onclick = () => partirAuConcours(trouve(b.dataset.partir)));
+}
+function partirAuConcours(inv) {
+  if (!inv) return; const L = LIEUX_CONCOURS[inv.lieu];
+  if (concours || lecon || balade || parcours.actif) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  if (inv.moi && etat.aPied) { toast('Monte à cheval pour participer (M), ou décoche « Je participe aussi »', 'rouge'); return; }
+  const enfants = Object.entries(inv.reponses).filter(([, r]) => r[0] === 'oui').map(([n]) => eleves.find(e => e.nom === n))
+    .filter(e => e && !['lecon', 'balade', 'concours', 'part'].includes(e.etat));
+  if (!enfants.length && !inv.moi) { toast('Personne ne participe : demande à tes élèves, ou participe toi-même', 'rouge'); return; }
+  const cout = 15 * (enfants.length + (inv.moi ? 1 : 0)); if (etat.pieces < cout) { toast(`Il faut ${cout} pièces d’inscription`, 'rouge'); return; }
+  etat.pieces -= cout; mesInvitations().splice(mesInvitations().indexOf(inv), 1);
+  for (const e of enfants) { if (e.etat === 'dort') lever(e); if (e.etat === 'mange' || e.etat === 'attendDej') { asseoir(e, false); e.place_cantine = null; } }
+  const d = departLieu(L); J.x = d.x - 3; J.z = d.z; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; // le van vous dépose à l'entrée
+  const entrees = [...enfants.map(entreeEnfant), ...entreesVisiteurs(3, L.niv), ...(inv.moi ? [entreeJoueur()] : [])];
+  lancerConcours(entrees, { type: 'club', terrain: inv.lieu, pause: 4 });
+  concours.nomLieu = L.nom;
+  toast(`Arrivée au ${L.nom} ! ${enfants.length ? `${enfants.map(e => e.nom).join(', ')} ${enfants.length > 1 ? 'concourent' : 'concourt'}` : ''}${inv.moi ? ' · tu passes en dernier' : ''}`, 'or');
+}
 function construireCuisiniere() {
   if (cuisiniere) scene.remove(cuisiniere.g);
   cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
@@ -1975,6 +2067,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  for (const L of Object.values(LIEUX_CONCOURS)) if (x > L.x1 - 6 && x < L.x2 + 6 && z > L.z1 - 6 && z < L.z2 + 8) return false;
   if (x > CARRE.x1 - 6 && x < CARRE.x2 + 6 && z > CARRE.z1 - 6 && z < CARRE.z2 + 8) return false;
   if (Math.abs(x - LAVAGE.x) < 7 && Math.abs(z - LAVAGE.z) < 7) return false;
   if (Math.abs(x - SELLAGE.x) < 5 && Math.abs(z - SELLAGE.z) < 4) return false;
@@ -5150,6 +5243,7 @@ function tirerMeteo() {
 }
 function nouveauJour() {
   tirerMeteo();
+  invitationsDuJour();
   for (const s of etat.stagiaires) s.faim = 60; // réveil : le petit-déjeuner se prend à la cantine
   payerPalefreniers();
   reproduction();
@@ -5616,7 +5710,8 @@ function finirBalade(reussie) {
 // le cavalier sait sauter (hMax de son niveau), Saut du cheval, humeur.
 let concours = null, vueConcours = false;
 const PRIX_CONCOURS = [150, 90, 60, 30, 20];
-const TERRAINS = { carriere: { depart: DEPART, zone: CARRIERE }, regional: { depart: DEPART_R, zone: REGIONAL } };
+const TERRAINS = { carriere: { depart: DEPART, zone: CARRIERE }, regional: { depart: DEPART_R, zone: REGIONAL }, ...Object.fromEntries(Object.entries(LIEUX_CONCOURS).map(([k, L]) => [k, { depart: departLieu(L), zone: L }])) };
+const nbObstTerrain = t => t === 'carriere' ? nbObstCarriere() : obstacles.filter(o => o.num && o.terrain === t).length || 6;
 const RANCHS = ['Ranch du Moulin', 'Écurie des Pins', 'Haras de la Source', 'Centre équestre du Lac', 'Écurie du Val', 'Ranch des Genêts'];
 const CAVALIERS = [['Camille', 'f'], ['Julien', 'm'], ['Sarah', 'f'], ['Maxime', 'm'], ['Clara', 'f'], ['Antoine', 'm'], ['Lucie', 'f'], ['Romain', 'm'], ['Eva', 'f'], ['Paul', 'm'], ['Noémie', 'f'], ['Hugo', 'm']];
 const CLASSES = {
@@ -5728,7 +5823,8 @@ function finirConcours() {
   const type = C.type;
   concours = null; vueConcours = false; camPrete = false; remettreBarres(); construireChevauxStage(); sonPiece(); sauver();
   if (type === 'ouvert') setTimeout(retirerVisiteurs, 4000);
-  ouvrir(`<div class="pnj">${type === 'regional' ? `Concours régional · ${CLASSES[C.classe].nom} ${fr(CLASSES[C.classe].h, 2)} m` : type === 'ouvert' ? 'Concours ouvert du ranch' : 'Concours du ranch'} · jour ${etat.jour}</div><h2>${titre}</h2>
+  if (type === 'club') { J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; } // le van vous ramène au ranch
+  ouvrir(`<div class="pnj">${type === 'regional' ? `Concours régional · ${CLASSES[C.classe].nom} ${fr(CLASSES[C.classe].h, 2)} m` : type === 'ouvert' ? 'Concours ouvert du ranch' : type === 'club' ? `Concours · ${C.nomLieu || 'club'} · retour au ranch en van` : 'Concours du ranch'} · jour ${etat.jour}</div><h2>${titre}</h2>
     <div class="aide-grille">${lignes.join('')}</div>
     <p>${type === 'ouvert' ? `Droits d’engagement des ranchs invités : <b>${frais} pièces</b>. ` : ''}${total ? `Prix gagnés par ton ranch : <b>${total} pièces</b>. ` : ''}Classement aux fautes (4 s chacune), puis au temps.</p>
     <button class="btn or gros" id="ok">Bravo à tous</button>`);
@@ -6004,7 +6100,7 @@ function basculerParcours(terrain = 'carriere') {
   if (etat.aPied) { toast('Monte à cheval pour prendre le départ (touche M)', 'rouge'); return; }
   remettreBarres();
   Object.assign(parcours, { actif: true, prochain: 1, t: 0, fautes: 0, affiche: 0, terrain });
-  toast(`${parcours.demo ? 'Démonstration' : 'Parcours'} lancé${parcours.demo ? 'e' : ''} ! Saute les obstacles de 1 à ${terrain === 'carriere' ? nbObstCarriere() : 6} dans l’ordre`, 'or');
+  toast(`${parcours.demo ? 'Démonstration' : 'Parcours'} lancé${parcours.demo ? 'e' : ''} ! Saute les obstacles de 1 à ${nbObstTerrain(terrain)} dans l’ordre`, 'or');
   son(440, 0.15, 'square', 0.04); setTimeout(() => son(880, 0.25, 'square', 0.04), 180);
 }
 function finirParcours() {
@@ -6055,6 +6151,7 @@ const interactions = [
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
   { x: DEPART.x, z: DEPART.z, r: 4.5, texte: () => parcours.actif ? 'Abandonner le parcours' : concours?.attenteJoueur ? 'Prendre le départ du concours' : 'Lancer le parcours', action: () => basculerParcours('carriere') },
+  ...Object.entries(LIEUX_CONCOURS).map(([k, L]) => ({ x: departLieu(L).x, z: departLieu(L).z, r: 4.5, si: () => concours?.terrain === k || (parcours.actif && parcours.terrain === k), texte: () => parcours.actif ? 'Abandonner le parcours' : 'Prendre le départ du concours', action: () => basculerParcours(k) })),
   { x: DEPART_R.x, z: DEPART_R.z, r: 4.5, si: () => concours?.terrain === 'regional' || (parcours.actif && parcours.terrain === 'regional'), texte: () => parcours.actif ? 'Abandonner le parcours' : 'Prendre le départ du concours', action: () => basculerParcours('regional') },
   { x: JUGE.x, z: JUGE.z, r: 4, texte: () => 'Organiser un concours ouvert', action: () => organiserOuvert() },
   { x: JUGE_R.x, z: JUGE_R.z, r: 4.5, texte: () => 'S’inscrire au concours régional', action: () => inscriptionRegional() },
@@ -6260,6 +6357,7 @@ addEventListener('keydown', e => {
   if (l === 'b') amenager();
   if (l === 'c') appelCours();
   if (l === 'k') panneauCantine();
+  if (l === 'j') panneauInvitations();
   if (lecon && /^(Digit|Numpad)[1-5]$/.test(e.code)) ordonner(ORDRES[+e.code.slice(-1) - 1][0]);
   if (l === 'f') nourrir(etat.pommes ? 'pomme' : 'carotte');
   if (concours && l === 'v') { vueConcours = !vueConcours; camPrete = false; }
@@ -6282,6 +6380,7 @@ $('#b-aide').onclick = aide;
 $('#invite').onclick = e => { e.preventDefault(); interagir(); }; // toucher le cadre « E » = appuyer sur E
 $('#b-appel-cours').onclick = e => { e.currentTarget.blur(); appelCours(); };
 $('#b-cantine').onclick = e => { e.currentTarget.blur(); panneauCantine(); };
+$('#b-invit').onclick = e => { e.currentTarget.blur(); panneauInvitations(); };
 // le bouton « Cours » : appeler les enfants d'où que l'on soit (au lieu d'aller les chercher au banc)
 function appelCours() {
   if (ouvert()) fermer();
@@ -6385,7 +6484,7 @@ function franchir(p0x, p0z) {
       if (!ok) parcours.fautes++;
       if (!o.terrain) reactionPublic(ok && !bas, o.hEff);
       parcours.prochain++;
-      if (parcours.prochain > (parcours.terrain === 'carriere' ? nbObstCarriere() : 6)) finirParcours();
+      if (parcours.prochain > nbObstTerrain(parcours.terrain)) finirParcours();
     }
   }
 }
@@ -6702,7 +6801,7 @@ function majHud(dt) {
     $('#lecon').querySelectorAll('[data-ordre]').forEach(b => b.classList.toggle('on', b.dataset.ordre === Lc.allure || (b.dataset.ordre === 'saut' && Lc.veutSauter)));
   }
   const ch = $('#chrono');
-  if (parcours.actif) { ch.hidden = false; ch.innerHTML = `${parcours.demo ? 'Démonstration · ' : ''}${fr(parcours.t)} s<small>prochain obstacle : ${parcours.prochain} sur ${parcours.terrain === 'carriere' ? nbObstCarriere() : 6} · fautes : ${parcours.fautes}${parcours.demo ? ` · dons : ${parcours.dons} pièces` : ''}</small>`; }
+  if (parcours.actif) { ch.hidden = false; ch.innerHTML = `${parcours.demo ? 'Démonstration · ' : ''}${fr(parcours.t)} s<small>prochain obstacle : ${parcours.prochain} sur ${nbObstTerrain(parcours.terrain)} · fautes : ${parcours.fautes}${parcours.demo ? ` · dons : ${parcours.dons} pièces` : ''}</small>`; }
   else if (parcours.affiche > 0) { parcours.affiche -= 0.1; ch.hidden = false; }
   else if (concours) { ch.hidden = false; const K = concours.cav; ch.innerHTML = concours.attenteJoueur ? `Concours · à toi !<small>${etat.aPied ? 'monte à cheval, puis ' : ''}va au départ du parcours et appuie sur E</small>` : K ? `Concours · ${K.F.nom} · ${fr(K.t)} s<small>${K.F.fautes} faute${K.F.fautes > 1 ? 's' : ''} · concurrent ${concours.i + 1} sur ${concours.file.length} · V : caméra</small>` : `Concours<small>prochain concurrent… · V : caméra</small>`; }
   else if (balade?.type === 'marche') { ch.hidden = false; ch.innerHTML = `Sortie au marché<small>${balade.auMarche ? 'ramène les enfants au ranch' : 'la route vers l’est, puis le sud'} · descendre arrête la sortie</small>`; }
@@ -6768,7 +6867,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); construireLieux(); if (!etat.invitationsVues) { etat.invitationsVues = true; nouvelleInvitation(1); } J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
@@ -6782,7 +6881,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
