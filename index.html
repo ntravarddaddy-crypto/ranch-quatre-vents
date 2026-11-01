@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 13:31";</script>
+<script>window.VERSION_JEU = "2026-11-01 13:36";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4690,7 +4690,10 @@ function arriveeEleve(e, jour) {
     case 'part': scene.remove(e.p.g); eleves.splice(eleves.indexOf(e), 1); break;
     case 'versCantine': servir(e); break;
     case 'versDej': e.etat = 'attendDej'; asseoir(e, true); break;
-    case 'promene': if (e.tAct > 0) promenerEnfant(e); else aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); break;
+    case 'promene': // arrivé : il regarde un peu, puis repart ailleurs, ou rentre au banc
+      if (e.tAct > 0) { if (!e.pauseBalade) { e.pauseBalade = true; e.attente = rand(2, 4); e.etat = 'promene'; break; } e.pauseBalade = false; promenerEnfant(e); }
+      else { if (e.copain) { e.copain.meneur = null; e.copain = null; } aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); }
+      break;
     case 'versPause': e.etat = 'pause'; e.p.g.visible = false; break;
   }
 }
@@ -4707,6 +4710,7 @@ function majEleves(dt) {
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
     if (!jour && e.etat === 'attend') soir(e);
     if (e.etat === 'demande') { if (!jour) { finirDemande(e, null); soir(e); } else majDemande(e, dt); continue; }
+    if (e.etat === 'copain') { if (!jour) { e.meneur = null; soir(e); } else majCopain(e, dt); continue; }
     if (e.etat === 'promene' || e.etat === 'pause' || e.etat === 'versPause') {
       e.tAct = (e.tAct || 0) - dt;
       if (e.etat === 'pause') { if (e.tAct <= 0 || !jour) { e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); } continue; }
@@ -4889,8 +4893,16 @@ const DEMANDES = [
     oui: (e, g) => { (etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' }).plat = g.aime; return [8, `Trop bien, ${PLATS[g.aime].le} ! Merci !`, `Au menu de la cantine : ${PLATS[g.aime].nom.toLowerCase()}`]; } },
   { id: 'dessert', texte: () => 'Est-ce qu’on peut avoir de la glace au dessert ?',
     oui: () => { (etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' }).dessert = 'glace'; return [6, 'Ouiii, de la glace !', 'Au menu de la cantine : glace en dessert']; } },
-  { id: 'promenade', texte: () => 'Je peux aller me promener un peu autour du ranch ?',
-    oui: e => { e.tAct = HEURE_S * 1; promenerEnfant(e); return [10, 'Merci ! Je reviens bientôt !', `${e.nom} part se promener une heure`]; } },
+  { id: 'promenade', texte: () => 'Je peux aller me promener un peu dans le ranch ?',
+    oui: e => { e.tAct = HEURE_S * 1.5; promenerEnfant(e); return [10, 'Merci ! Je reviens bientôt !', `${e.nom} part se promener vers ${e.lieuBalade}`]; } },
+  { id: 'deux', si: e => eleves.some(x => x !== e && x.etat === 'attend' && x.p.g.visible), prepare: (e, d) => { d.ami = pick(eleves.filter(x => x !== e && x.etat === 'attend' && x.p.g.visible)); },
+    texte: (e, g, d) => `Je peux aller me balader dans le ranch avec ${d.ami.nom} ?`,
+    oui: (e, g, d) => {
+      const a = d.ami; e.tAct = HEURE_S * 1.5;
+      if (a && a.etat === 'attend') { a.etat = 'copain'; a.meneur = e; e.copain = a; a.chemin = []; a.s.humeur = clamp(a.s.humeur + 8, 0, 100); }
+      e.trace = [{ x: e.x, z: e.z }]; promenerEnfant(e);
+      return [10, `Merci ! Viens, ${a?.nom || ''} !`, `${e.nom}${e.copain ? ` et ${a.nom}` : ''} partent se balader vers ${e.lieuBalade}`];
+    } },
   { id: 'travail', si: e => niveauDe(e.niveau || 1).allures.length > 2, texte: (e, g, d) => `Aujourd’hui, je voudrais travailler ${d.allure === 'saut' ? 'le saut' : `le ${d.allure}`} !`,
     prepare: (e, d) => { d.allure = pick(niveauDe(e.niveau || 1).allures.filter(a => a !== 'pas')); },
     oui: (e, g, d) => { e.objectif = d.allure; return [6, 'Génial ! Tu me fais un cours ?', `Objectif du jour de ${e.nom} : ${OBJ_TEXTE[d.allure]}. Donne-lui un cours (touche C)`]; } },
@@ -4910,21 +4922,38 @@ function lancerDemande() {
   e.demande = d; e.demande.question = d.texte(e, g, d); e.tDemande = 45; e.etat = 'demande'; e.chemin = [];
   toast(`${e.nom} veut te parler`, 'or');
 }
+// coins du ranch où les enfants vont se promener (dans la grille des itinéraires, x -48 à 70, z -72 à 66)
+const LIEUX_BALADE = [['la nurserie des poulains', -44, 36], ['la grande écurie', -34.25, 7], ['le paddock de reproduction', -42, 10], ['le paddock', -24, 31],
+  ['la sellerie', -16, 3], ['ta maison', 20, 5], ['le manège couvert', 5, 41], ['le rond de longe', -45, 37], ['la cantine', 54, 46], ['le jardin du gîte', 48, 32],
+  ['la carrière', 38, 6], ['le pré des stagiaires', 30, -21], ['l’écurie des box', 4, -24], ['le comptoir de Rose', 9, 22], ['le départ du sentier du lac', -12, -11]];
 function promenerEnfant(e, versCheval = false) {
-  const p = versCheval ? { x: PRE_ENFANTS.porte.x + rand(-3, 3), z: PRE_ENFANTS.z2 + 2.5 } : pick([{ x: rand(-6, 14), z: rand(22, 34) }, { x: rand(24, 32), z: rand(4, 14) }, { x: rand(-12, -4), z: rand(30, 40) }]);
-  aller(e, p.x, p.z, 'promene');
+  if (versCheval) { aller(e, PRE_ENFANTS.porte.x + rand(-3, 3), PRE_ENFANTS.z2 + 2.5, 'promene'); return; }
+  const loin = LIEUX_BALADE.filter(l => Math.hypot(l[1] - e.x, l[2] - e.z) > 12), l = pick(loin.length ? loin : LIEUX_BALADE);
+  e.lieuBalade = l[0]; aller(e, l[1] + rand(-1.5, 1.5), l[2] + rand(-1.5, 1.5), 'promene');
+  if (e.copain) e.copain.lieuBalade = l[0];
+}
+// un copain ou une copine qui suit, sur la trace exacte de l'enfant (donc jamais à travers un mur), 1,2 m derrière
+function majCopain(c, dt) {
+  const m = c.meneur;
+  if (!m || m.etat !== 'promene' || m.copain !== c) { c.meneur = null; aller(c, ATTENTE[c.place].x, ATTENTE[c.place].z, enfantsDebout() ? 'versBanc' : 'versGite'); return; }
+  const p = pointDerriere(m.trace || [], m.x, m.z, 1.2), dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
+  const v = Math.min(3.2, d / Math.max(dt, 1e-3));
+  if (d > 0.05) { c.x += dx / d * Math.min(d, v * dt); c.z += dz / d * Math.min(d, v * dt); c.p.g.rotation.y = Math.atan2(m.x - c.x, m.z - c.z); }
+  marcher(c.p, d > 0.05 ? Math.min(v, 2.6) : 0, dt); c.p.g.position.set(c.x, 0, c.z);
 }
 function majDemande(e, dt) { // il vient vers toi, puis attend ta réponse ; au bout de 45 s, il renonce
   e.tDemande -= dt;
   const d = Math.hypot(J.x - e.x, J.z - e.z);
   if (e.tDemande <= 0) { finirDemande(e, null); return; }
-  if (d < 2.6) { e.chemin = []; marcher(e.p, 0, dt); e.p.g.rotation.y = Math.atan2(J.x - e.x, J.z - e.z); if (!e.bulleDemande) { e.bulleDemande = etiquette('Je peux te demander quelque chose ?', '#2f1f13', '#fbf1dc', 0.42); e.bulleDemande.position.y = 2.2; e.p.g.add(e.bulleDemande); } return; }
+  if (d < 2.6) { e.chemin = []; marcher(e.p, 0, dt); e.p.g.rotation.y = Math.atan2(J.x - e.x, J.z - e.z);
+    if (!e.questionPosee && !ouvert()) { e.questionPosee = true; panneauDemande(e); } // la question s'affiche d'elle-même
+    if (!e.bulleDemande) { e.bulleDemande = etiquette('Je peux te demander quelque chose ?', '#2f1f13', '#fbf1dc', 0.42); e.bulleDemande.position.y = 2.2; e.p.g.add(e.bulleDemande); } return; }
   if (!e.chemin.length || (e.visee && Math.hypot(e.visee.x - J.x, e.visee.z - J.z) > 3)) { e.visee = { x: J.x, z: J.z }; e.chemin = cheminNav(e.x, e.z, J.x, J.z); }
   if (e.chemin.length) avancer(e, dt);
 }
 function finirDemande(e, reponse) {
   if (e.bulleDemande) { e.p.g.remove(e.bulleDemande); e.bulleDemande = null; }
-  const d = e.demande; e.demande = null; e.visee = null;
+  const d = e.demande; e.demande = null; e.visee = null; e.questionPosee = false;
   const dire = t => { const b = etiquette(t, '#2f1f13', '#fbf1dc', 0.42); b.position.y = 2.2; e.p.g.add(b); setTimeout(() => e.p.g.remove(b), 2600); };
   let parti = false;
   if (reponse === 'oui') {
@@ -4939,7 +4968,8 @@ function finirDemande(e, reponse) {
 function panneauDemande(e) {
   const d = e.demande; if (!d) return;
   ouvrir(`<div class="pnj">${e.nom} · ${humeurTexte(e.s.humeur, e.genre)}</div><h2>« ${d.question} »</h2>
-    <div class="boutons"><button class="btn or gros" id="dm-oui">Oui</button><button class="btn gros" id="dm-non">Non</button><button class="btn" id="dm-tard">Plus tard</button></div>`);
+    <div class="boutons"><button class="btn or gros" id="dm-oui">Oui</button><button class="btn gros" id="dm-non">Non</button><button class="btn gros" id="dm-tard">Plus tard</button></div>
+    <p class="note">Si tu fermes sans répondre, ${e.nom} attend encore un peu : appuie sur E (ou Action) près de ${accord(e.s, 'elle', 'lui')}.</p>`);
   $('#dm-oui').onclick = () => { fermer(); finirDemande(e, 'oui'); };
   $('#dm-non').onclick = () => { fermer(); finirDemande(e, 'non'); };
   $('#dm-tard').onclick = () => { fermer(); finirDemande(e, 'tard'); };
@@ -4964,7 +4994,7 @@ function panneauGite() {
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -5682,11 +5712,6 @@ function interactionProche() {
     if (d < 3 && d < bd) { bd = d; best = { texte: () => `${po.pre.ouverte ? 'Fermer' : 'Ouvrir'} la barrière du ${po.pre.nom}`, action: () => basculerPorte(po) }; }
   }
   for (const e of eleves) {
-    if (e.etat !== 'demande') continue;
-    const d = Math.hypot(J.x - e.x, J.z - e.z);
-    if (d < 4 && d < bd + 1) { bd = Math.min(bd, d); best = { texte: () => `Écouter ${e.nom}`, action: () => panneauDemande(e) }; }
-  }
-  for (const e of eleves) {
     if (e.etat !== 'attend') continue;
     const d = Math.hypot(J.x - e.x, J.z - e.z);
     if (d < 3.5 && d < bd) { bd = d; best = { texte: () => `Proposer un cours ou une balade à ${e.nom}`, action: () => proposerLecon(e) }; }
@@ -5697,6 +5722,9 @@ function interactionProche() {
     const d = Math.hypot(J.x - o.x, J.z - o.z);
     if (d < 3 && d < bd) { bd = d; best = { texte: () => `Régler l’obstacle ${o.num}`, action: tableauCarriere }; }
   }
+  // un enfant qui vient te parler passe avant tout le reste (Léa n'arrivait pas à lui répondre, 2026-11-01)
+  const parle = eleves.filter(e => e.etat === 'demande' && Math.hypot(J.x - e.x, J.z - e.z) < 5).sort((a, b) => Math.hypot(J.x - a.x, J.z - a.z) - Math.hypot(J.x - b.x, J.z - b.z))[0];
+  if (parle) return { texte: () => `Répondre à ${parle.nom}`, action: () => panneauDemande(parle) };
   return best;
 }
 function interagir() {
@@ -5879,7 +5907,7 @@ function appelCours() {
     const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
     return;
   }
-  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
+  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
   proposerLecon(null);
 }
 if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
