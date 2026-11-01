@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 12:06";</script>
+<script>window.VERSION_JEU = "2026-11-01 13:26";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4668,6 +4668,8 @@ function arriveeEleve(e, jour) {
     case 'part': scene.remove(e.p.g); eleves.splice(eleves.indexOf(e), 1); break;
     case 'versCantine': servir(e); break;
     case 'versDej': e.etat = 'attendDej'; asseoir(e, true); break;
+    case 'promene': if (e.tAct > 0) promenerEnfant(e); else aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); break;
+    case 'versPause': e.etat = 'pause'; e.p.g.visible = false; break;
   }
 }
 function majEleves(dt) {
@@ -4682,6 +4684,12 @@ function majEleves(dt) {
     if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours') continue;
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
     if (!jour && e.etat === 'attend') soir(e);
+    if (e.etat === 'demande') { if (!jour) { finirDemande(e, null); soir(e); } else majDemande(e, dt); continue; }
+    if (e.etat === 'promene' || e.etat === 'pause' || e.etat === 'versPause') {
+      e.tAct = (e.tAct || 0) - dt;
+      if (e.etat === 'pause') { if (e.tAct <= 0 || !jour) { e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); } continue; }
+      if (!jour) { soir(e); continue; }
+    }
     if (e.etat === 'attendDej') { // assis, il attend son petit-déjeuner ; à 10 h 30, il renonce
       if (e.p.humain) animerHumain(e.p, 0, dt, true); else marcher(e.p, 0, dt);
       if (etat.heure >= HEURE_FIN_DEJ || !jour) {
@@ -4702,6 +4710,7 @@ function majEleves(dt) {
   }
   for (const h of chevauxStage) majChevalStage(h, dt);
   majPreEnfants(dt);
+  if (jour && etat.heure >= 8 && etat.heure < 17.5 && !lecon && !balade && !concours && !parcours.actif && !longe && !eleves.some(e => e.etat === 'demande') && (prochaineDemande -= dt) <= 0) { prochaineDemande = rand(50, 110); lancerDemande(); }
   if (jour) for (const s of etat.stagiaires) { // la faim monte ; sous 35, l'humeur baisse
     const e = eleves.find(x => x.s === s); if (e?.etat === 'mange') continue;
     s.faim = Math.max(0, (s.faim ?? 100) - 7 * dt / HEURE_S);
@@ -4849,6 +4858,70 @@ function finirRepas(e) {
   e.repas = null; e.place_cantine = null; e.p.g.position.set(e.x, 0, e.z);
   if (enfantsDebout()) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e);
 }
+// ---- Les enfants viennent te parler (2026-11-01) : de temps en temps, un enfant assis au banc se lève, vient te
+// trouver où que tu sois et te demande quelque chose (manger, se promener, travailler une allure, voir son cheval…).
+// E près de lui : tu réponds Oui, Non ou Plus tard. Oui le rend content et il le fait ; Non le déçoit un peu.
+let prochaineDemande = 30;
+const DEMANDES = [
+  { id: 'repas', si: () => etat.heure < 13, texte: (e, g) => `J’ai faim ! On pourra manger ${PLATS[g.aime].le} à la cantine ?`,
+    oui: (e, g) => { (etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' }).plat = g.aime; return [8, `Trop bien, ${PLATS[g.aime].le} ! Merci !`, `Au menu de la cantine : ${PLATS[g.aime].nom.toLowerCase()}`]; } },
+  { id: 'dessert', texte: () => 'Est-ce qu’on peut avoir de la glace au dessert ?',
+    oui: () => { (etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' }).dessert = 'glace'; return [6, 'Ouiii, de la glace !', 'Au menu de la cantine : glace en dessert']; } },
+  { id: 'promenade', texte: () => 'Je peux aller me promener un peu autour du ranch ?',
+    oui: e => { e.tAct = HEURE_S * 1; promenerEnfant(e); return [10, 'Merci ! Je reviens bientôt !', `${e.nom} part se promener une heure`]; } },
+  { id: 'travail', si: e => niveauDe(e.niveau || 1).allures.length > 2, texte: (e, g, d) => `Aujourd’hui, je voudrais travailler ${d.allure === 'saut' ? 'le saut' : `le ${d.allure}`} !`,
+    prepare: (e, d) => { d.allure = pick(niveauDe(e.niveau || 1).allures.filter(a => a !== 'pas')); },
+    oui: (e, g, d) => { e.objectif = d.allure; return [6, 'Génial ! Tu me fais un cours ?', `Objectif du jour de ${e.nom} : ${OBJ_TEXTE[d.allure]}. Donne-lui un cours (touche C)`]; } },
+  { id: 'cheval', texte: e => `Je peux aller faire un câlin à ${e.s.cheval?.nom || 'mon cheval'} et le brosser ?`,
+    oui: e => { if (e.s.cheval?.stats) gagnerXp(e.s.cheval, 'lien', 6); e.tAct = HEURE_S * 0.5; promenerEnfant(e, true); return [7, 'Merci ! Il va être tout beau !', `${e.nom} va brosser son cheval`]; } },
+  { id: 'pause', si: () => etat.heure >= 13, texte: () => 'Je suis un peu fatigué… je peux faire une pause au gîte ?',
+    oui: e => { e.tAct = HEURE_S * 1; aller(e, PORTE_GITE.x, PORTE_GITE.z, 'versPause'); return [8, 'Merci, je reviens en forme !', `${e.nom} se repose une heure au gîte`]; } },
+  { id: 'parents', texte: () => 'Je peux appeler mes parents pour leur raconter ma journée ?', oui: () => [6, 'Merci ! Ils vont être trop contents !', null] },
+  { id: 'jeu', texte: () => 'On peut faire une partie de ballon tous ensemble ?', oui: () => { for (const s of etat.stagiaires) s.humeur = clamp(s.humeur + 4, 0, 100); return [6, 'Youpi ! Tout le monde joue !', 'Tous les enfants gagnent de la bonne humeur']; } },
+  { id: 'photo', texte: () => 'Tu peux me prendre en photo avec mon cheval ? C’est pour ma maman !', oui: () => [7, 'Merci ! Elle est trop belle !', null] },
+];
+function lancerDemande() {
+  const libres = eleves.filter(e => e.etat === 'attend' && e.p.g.visible);
+  if (!libres.length) return;
+  const e = pick(libres), g = goutsDe(e.nom), possibles = DEMANDES.filter(d => !d.si || d.si(e));
+  const d = { ...pick(possibles) }; d.prepare?.(e, d);
+  e.demande = d; e.demande.question = d.texte(e, g, d); e.tDemande = 45; e.etat = 'demande'; e.chemin = [];
+  toast(`${e.nom} veut te parler`, 'or');
+}
+function promenerEnfant(e, versCheval = false) {
+  const p = versCheval ? { x: PRE_ENFANTS.porte.x + rand(-3, 3), z: PRE_ENFANTS.z2 + 2.5 } : pick([{ x: rand(-6, 14), z: rand(22, 34) }, { x: rand(24, 32), z: rand(4, 14) }, { x: rand(-12, -4), z: rand(30, 40) }]);
+  aller(e, p.x, p.z, 'promene');
+}
+function majDemande(e, dt) { // il vient vers toi, puis attend ta réponse ; au bout de 45 s, il renonce
+  e.tDemande -= dt;
+  const d = Math.hypot(J.x - e.x, J.z - e.z);
+  if (e.tDemande <= 0) { finirDemande(e, null); return; }
+  if (d < 2.6) { e.chemin = []; marcher(e.p, 0, dt); e.p.g.rotation.y = Math.atan2(J.x - e.x, J.z - e.z); if (!e.bulleDemande) { e.bulleDemande = etiquette('Je peux te demander quelque chose ?', '#2f1f13', '#fbf1dc', 0.42); e.bulleDemande.position.y = 2.2; e.p.g.add(e.bulleDemande); } return; }
+  if (!e.chemin.length || (e.visee && Math.hypot(e.visee.x - J.x, e.visee.z - J.z) > 3)) { e.visee = { x: J.x, z: J.z }; e.chemin = cheminNav(e.x, e.z, J.x, J.z); }
+  if (e.chemin.length) avancer(e, dt);
+}
+function finirDemande(e, reponse) {
+  if (e.bulleDemande) { e.p.g.remove(e.bulleDemande); e.bulleDemande = null; }
+  const d = e.demande; e.demande = null; e.visee = null;
+  const dire = t => { const b = etiquette(t, '#2f1f13', '#fbf1dc', 0.42); b.position.y = 2.2; e.p.g.add(b); setTimeout(() => e.p.g.remove(b), 2600); };
+  let parti = false;
+  if (reponse === 'oui') {
+    const [bonus, merci, info] = d.oui(e, goutsDe(e.nom), d); e.s.humeur = clamp(e.s.humeur + bonus, 0, 100); dire(merci); if (info) toast(info, 'or');
+    parti = ['promene', 'versPause'].includes(e.etat);
+  } else if (reponse === 'non') { e.s.humeur = clamp(e.s.humeur - 4, 0, 100); dire(pick(['Oh… d’accord.', 'Dommage…', 'Pfff…'])); }
+  else if (reponse === 'tard') dire('D’accord, plus tard !');
+  else { e.s.humeur = clamp(e.s.humeur - 2, 0, 100); toast(`${e.nom} est retourné au banc : personne ne l’a écouté`); }
+  if (!parti) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc');
+  prochaineDemande = rand(50, 110);
+}
+function panneauDemande(e) {
+  const d = e.demande; if (!d) return;
+  ouvrir(`<div class="pnj">${e.nom} · ${humeurTexte(e.s.humeur, e.genre)}</div><h2>« ${d.question} »</h2>
+    <div class="boutons"><button class="btn or gros" id="dm-oui">Oui</button><button class="btn gros" id="dm-non">Non</button><button class="btn" id="dm-tard">Plus tard</button></div>`);
+  $('#dm-oui').onclick = () => { fermer(); finirDemande(e, 'oui'); };
+  $('#dm-non').onclick = () => { fermer(); finirDemande(e, 'non'); };
+  $('#dm-tard').onclick = () => { fermer(); finirDemande(e, 'tard'); };
+}
 function panneauGite() {
   const fiches = [...Array(CHAMBRES).keys()].map(i => {
     const s = etat.stagiaires.find(t => t.chambre === i);
@@ -4869,7 +4942,7 @@ function panneauGite() {
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -5587,6 +5660,11 @@ function interactionProche() {
     if (d < 3 && d < bd) { bd = d; best = { texte: () => `${po.pre.ouverte ? 'Fermer' : 'Ouvrir'} la barrière du ${po.pre.nom}`, action: () => basculerPorte(po) }; }
   }
   for (const e of eleves) {
+    if (e.etat !== 'demande') continue;
+    const d = Math.hypot(J.x - e.x, J.z - e.z);
+    if (d < 4 && d < bd + 1) { bd = Math.min(bd, d); best = { texte: () => `Écouter ${e.nom}`, action: () => panneauDemande(e) }; }
+  }
+  for (const e of eleves) {
     if (e.etat !== 'attend') continue;
     const d = Math.hypot(J.x - e.x, J.z - e.z);
     if (d < 3.5 && d < bd) { bd = d; best = { texte: () => `Proposer un cours ou une balade à ${e.nom}`, action: () => proposerLecon(e) }; }
@@ -5779,7 +5857,7 @@ function appelCours() {
     const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
     return;
   }
-  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
+  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
   proposerLecon(null);
 }
 if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
@@ -6260,7 +6338,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
