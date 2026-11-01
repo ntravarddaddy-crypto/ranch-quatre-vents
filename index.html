@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-10-12 19:48";</script>
+<script>window.VERSION_JEU = "2026-11-01 11:33";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -237,6 +237,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
     <button id="b-pied" type="button">Descendre <kbd>M</kbd></button>
     <button id="b-amenager" type="button">Aménager <kbd>B</kbd></button>
     <button id="b-appel-cours" type="button">Cours <kbd>C</kbd></button>
+    <button id="b-cantine" type="button">Cantine <kbd>K</kbd></button>
     <button id="b-aide" type="button">Aide <kbd>?</kbd></button>
   </nav>
   <div id="chrono" class="carton" hidden></div>
@@ -384,7 +385,8 @@ const BOXES = { x1: -12, z: -28, n: 8, l: 4.2, prof: 4 };  // écurie des box : 
 const BOXES2 = { x1: 6, z: -18, n: 7, l: 4.2, prof: 4 };   // box des stagiaires, face à la première rangée : portes en z = -18, fond en z = -14
 const GRANGE = { x1: -40, x2: -28.5, z1: -18, z2: 4, n: 5, l: 4.2, prof: 4 }; // grande écurie fermée (2026-10-12) : allée nord-sud
 // de x = -36 à -32.5, ouverte aux deux bouts ; 5 box à l'ouest (15 à 19), 5 à l'est (20 à 24)
-const GITE = { x: 40, z: 37, hx: 5, hz: 7 };                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
+const GITE = { x: 40, z: 37, hx: 5, hz: 7 };
+const CANTINE = { x: 54, z: 39 };                                 // cantine (2026-11-01) : préau à l'est du gîte, comptoir côté est                  // gîte des cavaliers, deux niveaux, façade à l'ouest (x = 35)
 const PORTE_GITE = { x: GITE.x - GITE.hx - 1.3, z: GITE.z };
 const PRE_ENFANTS = { x1: 24, x2: 40, z1: -46, z2: -24, porte: { x: 30 } }; // pré des chevaux des stagiaires, à côté de leurs box, barrière au sud
 const REPRO = { x1: -62, x2: -44, z1: -8, z2: 8 };                       // paddock de reproduction
@@ -1535,6 +1537,39 @@ const texPaves = peindre(256, (c, T) => {
   }
   zoneRegional = regrouper(n0, 160, -125);
 }
+// cantine : préau ouvert (6 poteaux, toit à deux pans), une longue table et deux bancs, un comptoir de cuisine.
+// Les places des enfants (PLACES_CANTINE) sont sur les bancs ; une assiette apparaît devant chacun pendant le repas.
+const PLACES_CANTINE = [-2, 0, 2].flatMap(dx => [{ x: CANTINE.x + dx - 1.5, z: CANTINE.z - 0.75, rot: 0 }, { x: CANTINE.x + dx - 1.5, z: CANTINE.z + 0.75, rot: Math.PI }]);
+const assiettes = [];
+let cuisiniere = null;
+{
+  const C = CANTINE, g = new THREE.Group(), toit = new THREE.Group(); scene.add(g); scene.add(toit);
+  for (const dx of [-5, 0, 5]) for (const dz of [-3.5, 3.5]) maille(cylGeo(0.12, 0.14, 3.2, 10), MAT.bois, C.x + dx, 1.6, C.z + dz, g);
+  for (const s of [1, -1]) { const pan = bloc(11, 0.14, 4.3, MAT.toit, C.x, 3.75, C.z + s * 1.95, toit); pan.rotation.x = s * 0.32; }
+  bloc(11.2, 0.2, 0.25, robeMat(0x2e2724, 0.8), C.x, 4.4, C.z, toit);
+  dalle(C.x - 5.5, C.z - 3.8, C.x + 5.5, C.z + 3.8, new THREE.MeshStandardMaterial({ map: repete(TEX.bois, 6, 4), color: 0xc8b49a, roughness: 0.95 }), 0.03);
+  const tx = C.x - 1.5, nappe = robeMat(0xd94b3b, 0.8);
+  bloc(6.4, 0.08, 1.0, MAT.bois, tx, 0.76, C.z, g); bloc(6.5, 0.02, 1.05, nappe, tx, 0.81, C.z, g);
+  for (const dx of [-2.9, 2.9]) for (const dz of [-0.35, 0.35]) bloc(0.08, 0.74, 0.08, MAT.bois, tx + dx, 0.37, C.z + dz, g);
+  for (const s of [1, -1]) { bloc(6.2, 0.07, 0.32, MAT.bois, tx, 0.45, C.z + s * 0.78, g); for (const dx of [-2.8, 0, 2.8]) bloc(0.07, 0.42, 0.07, MAT.bois, tx + dx, 0.21, C.z + s * 0.78, g); }
+  // comptoir et cuisine, côté est
+  bloc(0.8, 1.0, 3.4, MAT.peint, C.x + 3.6, 0.5, C.z, g); bloc(0.95, 0.06, 3.6, robeMat(0xe9e4da, 0.4), C.x + 3.6, 1.03, C.z, g);
+  bloc(0.7, 0.9, 1.4, robeMat(0x3a3f45, 0.4), C.x + 4.8, 0.45, C.z - 1.6, g); // fourneau
+  maille(cylGeo(0.22, 0.2, 0.3, 14), robeMat(0x9aa3ab, 0.3), C.x + 4.8, 1.05, C.z - 1.9, g); maille(cylGeo(0.18, 0.16, 0.22, 14), robeMat(0x9aa3ab, 0.3), C.x + 4.8, 1.0, C.z - 1.3, g);
+  fusionner(g); fusionner(toit);
+  const lab = etiquette('Cantine', '#2f1f13', '#f3eee4', 0.9); lab.position.set(C.x, 4.9, C.z - 3.6); scene.add(lab);
+  for (const pl of PLACES_CANTINE) {
+    const a = new THREE.Group(); a.position.set(pl.x, 0.83, pl.z + (pl.rot ? -0.3 : 0.3)); a.visible = false; scene.add(a);
+    maille(cylGeo(0.14, 0.12, 0.02, 16), robeMat(0xf6f3ec, 0.3), 0, 0, 0, a); a.userData.plat = maille(cylGeo(0.09, 0.09, 0.025, 12), robeMat(0xc8762c, 0.8), 0, 0.02, 0, a);
+    maille(cylGeo(0.03, 0.025, 0.1, 8), robeMat(0xbfe3f0, 0.1), 0.18, 0.05, 0, a); assiettes.push(a);
+  }
+  for (let dx = -2.8; dx <= 2.8; dx += 0.7) meubles.push({ x: tx + dx, z: C.z, r: 0.42 });
+  for (const dz of [-1.4, 0, 1.4]) meubles.push({ x: C.x + 3.6, z: C.z + dz, r: 0.5 });
+}
+function construireCuisiniere() {
+  if (cuisiniere) scene.remove(cuisiniere.g);
+  cuisiniere = pieton('Josette · cantine', 0xf3eee4, 0x8a8f96, 'f'); cuisiniere.g.position.set(CANTINE.x + 4.3, 0, CANTINE.z + 0.6); cuisiniere.g.rotation.y = -Math.PI / 2; scene.add(cuisiniere.g);
+}
 // nurserie : un abri ouvert sur poteaux contre la clôture ouest, un râtelier bas, un abreuvoir (le nom est posé par construirePre)
 {
   const E = ELEVAGE, g = new THREE.Group(); scene.add(g);
@@ -1615,6 +1650,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (Math.abs(x - CANTINE.x) < 9 && Math.abs(z - CANTINE.z) < 8) return false;
   if (x > GRANGE.x1 - 5 && x < GRANGE.x2 + 5 && z > GRANGE.z1 - 6 && z < GRANGE.z2 + 6) return false;
   if (x > MAISON.x - MAISON.hx - 5 && x < MAISON.x + MAISON.hx + 5 && z > MAISON.z - MAISON.hz - 6 && z < MAISON.z + MAISON.hz + 5) return false;
   if (x > GITE.x - GITE.hx - 7 && x < GITE.x + GITE.hx + 5 && z > GITE.z - GITE.hz - 5 && z < GITE.z + GITE.hz + 5) return false;
@@ -2426,7 +2462,7 @@ function majCavalier(h, dt, vit, enLair) {
 let basileModele = null;
 function remplacerHumains() {
   construireActif(); construirePieton(); majResidents();
-  rafraichirCavaliers(); construireMarchands(); construirePalefreniers();
+  rafraichirCavaliers(); construireMarchands(); construirePalefreniers(); construireCuisiniere();
   if (basileModele && HUMAIN.pret && !basileModele.humain) { // Rémy peut arriver après Amy : une seule fois, et quand il est là
     scene.remove(basileModele);
     const h = humainReel({ veste: 0x2f6fb5, bas: 0x3d5a80, cheveux: 0x2a2420 }, 'Basile · Chevaux à vendre');
@@ -3068,7 +3104,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -4392,6 +4428,11 @@ function arriveeEleve(e, jour) {
     case 'versGite': e.etat = 'gite'; e.p.g.visible = false; break;
     case 'revient': if (jour) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e); break;
     case 'part': scene.remove(e.p.g); eleves.splice(eleves.indexOf(e), 1); break;
+    case 'versCantine': {
+      e.etat = 'mange'; e.mange = HEURE_S * 0.75; asseoir(e, true);
+      const a = assiettes[e.place_cantine]; if (a) { a.visible = true; a.userData.plat.material = robeMat(COULEURS_PLAT[e.repas?.plat] ?? 0xc8762c, 0.8); }
+      break;
+    }
   }
 }
 function majEleves(dt) {
@@ -4406,6 +4447,11 @@ function majEleves(dt) {
     if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours') continue;
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
     if (!jour && e.etat === 'attend') soir(e);
+    if (e.etat === 'mange') { // à table : assis, il mange une heure de jeu
+      if (e.p.humain) animerHumain(e.p, 0, dt, true); else marcher(e.p, 0, dt);
+      if ((e.mange -= dt) <= 0 || !jour) finirRepas(e);
+      continue;
+    }
     if (e.attente > 0) { e.attente -= dt; marcher(e.p, 0, dt); continue; }
     if (e.chemin?.length) { avancer(e, dt); continue; }
     marcher(e.p, 0, dt);
@@ -4413,11 +4459,17 @@ function majEleves(dt) {
   }
   for (const h of chevauxStage) majChevalStage(h, dt);
   majPreEnfants(dt);
+  if (jour) for (const s of etat.stagiaires) { // la faim monte ; sous 35, l'humeur baisse
+    const e = eleves.find(x => x.s === s); if (e?.etat === 'mange') continue;
+    s.faim = Math.max(0, (s.faim ?? 100) - 7 * dt / HEURE_S);
+    if (s.faim < 35) s.humeur = Math.max(0, s.humeur - 3 * dt / HEURE_S);
+  }
 }
 // ---- Le temps passe : nouvelle journée à minuit, rappel le soir
 function majTemps(dt) {
   const avant = etat.heure;
   etat.heure += dt / HEURE_S;
+  if (avant < 12 && etat.heure >= 12 && etat.stagiaires.length) toast('Midi : les enfants ont faim. Appelle-les à la cantine (bouton Cantine, ou touche K)', 'or');
   if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont au gîte');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
   if (etat.heure >= 24) { etat.heure -= 24; etat.jour++; nouveauJour(); }
@@ -4435,6 +4487,7 @@ function tirerMeteo() {
 }
 function nouveauJour() {
   tirerMeteo();
+  for (const s of etat.stagiaires) s.faim = 100; // petit-déjeuner au gîte
   payerPalefreniers();
   reproduction();
   if (etat.chevaux.some(c => c.naissance && etat.jour - c.naissance <= AGE_ADULTE + 1)) majResidents();
@@ -4465,6 +4518,66 @@ function dormir() {
   construireChevauxStage();
   toast(`Bonne nuit... Jour ${etat.jour}, 7 h du matin. Les chevaux au box ont eu leur ration`, 'or'); sauver();
 }
+// ---- Cantine (2026-11-01) : les enfants ont faim au fil de la journée (s.faim, 100 au réveil, -7 par heure) ; quand
+// elle passe sous 35, leur humeur baisse. C'est toi qui choisis le plat et le dessert et qui les appelles à table :
+// ceux qui sont au banc y vont, s'assoient, mangent une heure de jeu, puis reviennent. Chacun a un plat préféré et un
+// plat qu'il n'aime pas (tirés de son prénom).
+const PLATS = { pates: { le: 'les pâtes à la bolognaise', nom: 'Pâtes à la bolognaise', prix: 3, humeur: 10 }, pizza: { le: 'la pizza', nom: 'Pizza', prix: 4, humeur: 13 }, poulet: { le: 'le poulet frites', nom: 'Poulet frites', prix: 4, humeur: 12 },
+  croque: { le: 'les croque-monsieur', nom: 'Croque-monsieur et salade', prix: 3, humeur: 9 }, lasagnes: { le: 'les lasagnes', nom: 'Lasagnes', prix: 4, humeur: 12 }, soupe: { le: 'la soupe', nom: 'Soupe et tartines', prix: 2, humeur: 6 },
+  poisson: { le: 'le poisson', nom: 'Poisson, riz et légumes', prix: 3, humeur: 7 }, hamburger: { le: 'les hamburgers', nom: 'Hamburger', prix: 5, humeur: 14 } };
+const DESSERTS = { aucun: { nom: 'Pas de dessert', prix: 0, humeur: 0 }, fruit: { nom: 'Un fruit', prix: 1, humeur: 3 }, compote: { nom: 'Compote', prix: 1, humeur: 3 },
+  yaourt: { nom: 'Yaourt', prix: 1, humeur: 4 }, gateau: { nom: 'Gâteau au chocolat', prix: 2, humeur: 7 }, glace: { nom: 'Glace', prix: 2, humeur: 8 }, crepes: { nom: 'Crêpes', prix: 2, humeur: 8 } };
+const COULEURS_PLAT = { pates: 0xc8762c, pizza: 0xd9452e, poulet: 0xe6b450, croque: 0xe8c77a, lasagnes: 0xb9472a, soupe: 0x8fa04a, poisson: 0xf1ead8, hamburger: 0x7a4a2a };
+const hashNom = n => [...n].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+const goutsDe = nom => { const k = Object.keys(PLATS), h = hashNom(nom), aime = k[h % k.length]; let deteste = k[(h >>> 4) % k.length]; if (deteste === aime) deteste = k[(k.indexOf(aime) + 3) % k.length]; return { aime, deteste }; };
+const peutManger = e => e.p.g.visible && (e.etat === 'attend' || e.etat === 'versBanc');
+function panneauCantine() {
+  if (ouvert()) fermer();
+  const h = heureTexte(etat.heure), m = etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' };
+  if (!etat.stagiaires.length) { ouvrir(`<div class="pnj">Josette · cantine · ${h}</div><h2>Personne à nourrir</h2><p>Les enfants en stage mangent ici. Il n’y en a aucun pour l’instant.</p>`); return; }
+  if (!enfantsDebout()) { ouvrir(`<div class="pnj">Josette · cantine · ${h}</div><h2>Les enfants sont au gîte</h2><p>Ils prennent leur petit-déjeuner et leur dîner au gîte. La cantine sert de 7 h à 18 h.</p>`); return; }
+  const prix = PLATS[m.plat].prix + DESSERTS[m.dessert].prix, prets = eleves.filter(peutManger);
+  const lignes = etat.stagiaires.map(s => {
+    const e = eleves.find(x => x.s === s), g = goutsDe(s.nom), f = Math.round(s.faim ?? 100);
+    const ou = !e || !e.p.g.visible ? 'au gîte' : e.etat === 'mange' ? 'à table' : e.etat === 'versCantine' ? 'arrive à la cantine' : peutManger(e) ? 'au banc, prêt' : 'occupé';
+    return `<div class="stat"><span>${s.nom} · ${ou}</span><div class="barre"><i style="width:${f}%;background:${f < 35 ? 'var(--rouge)' : f < 60 ? 'var(--or)' : 'var(--vert)'}"></i></div><b>${f}</b></div>
+      <small style="display:block;margin:-2px 0 6px;opacity:.8">aime ${PLATS[g.aime].le} · n’aime pas ${PLATS[g.deteste].le}</small>`;
+  }).join('');
+  const choix = (liste, cle, attr) => Object.entries(liste).map(([k, v]) => `<button class="btn ${m[cle] === k ? 'or' : ''}" ${attr}="${k}">${v.nom}${v.prix ? ` · ${v.prix} p.` : ''}</button>`).join('');
+  ouvrir(`<div class="pnj">Josette · cantine · jour ${etat.jour}, ${h}</div><h2>À table !</h2>
+    <h3 class="section">Faim des enfants</h3>${lignes}
+    <h3 class="section">Le plat</h3><div class="boutons">${choix(PLATS, 'plat', 'data-plat')}</div>
+    <h3 class="section">Le dessert</h3><div class="boutons">${choix(DESSERTS, 'dessert', 'data-dessert')}</div>
+    <p class="note">Repas : ${prix} pièce${prix > 1 ? 's' : ''} par enfant. Tu as ${etat.pieces} pièces.</p>
+    <div class="boutons"><button class="btn or gros" id="a-table" ${prets.length && etat.pieces >= prix * prets.length ? '' : 'disabled'}>${prets.length ? `Appeler ${prets.length > 1 ? `les ${prets.length} enfants` : prets[0].nom} à table · ${prix * prets.length} pièces` : 'Aucun enfant au banc pour l’instant'}</button></div>
+    <p class="note">Seuls les enfants assis au banc viennent : ceux qui sont avec leur cheval ou en cours finissent d’abord.</p>`);
+  const C = $('#contenu');
+  C.querySelectorAll('[data-plat]').forEach(b => b.onclick = () => { m.plat = b.dataset.plat; sauver(); panneauCantine(); });
+  C.querySelectorAll('[data-dessert]').forEach(b => b.onclick = () => { m.dessert = b.dataset.dessert; sauver(); panneauCantine(); });
+  $('#a-table').onclick = () => {
+    const liste = eleves.filter(peutManger), cout = prix * liste.length; if (!liste.length || etat.pieces < cout) return;
+    etat.pieces -= cout; sonPiece();
+    const libres = PLACES_CANTINE.map((_, i) => i).filter(i => !eleves.some(x => x.place_cantine === i && (x.etat === 'mange' || x.etat === 'versCantine')));
+    for (const e of liste) { const i = libres.shift(); if (i == null) break; e.place_cantine = i; e.repas = { plat: m.plat, dessert: m.dessert }; aller(e, PLACES_CANTINE[i].x, PLACES_CANTINE[i].z, 'versCantine'); }
+    sauver(); fermer(); toast(`À table ! ${PLATS[m.plat].nom}${m.dessert !== 'aucun' ? ` et ${DESSERTS[m.dessert].nom.toLowerCase()}` : ''} · −${cout} pièces`, 'or');
+  };
+}
+function asseoir(e, oui) {
+  const pl = PLACES_CANTINE[e.place_cantine];
+  if (e.p.humain) { e.p.g.position.y = oui ? 0.45 - e.p.H.hanchesAssis.y + 0.02 : 0; }
+  else { e.p.g.position.y = oui ? -0.42 : 0; (e.p.jambes || []).forEach(j => { j.rotation.x = oui ? -1.4 : 0; }); }
+  if (oui && pl) { e.p.g.rotation.y = pl.rot; e.p.g.position.z = pl.z + (pl.rot ? 0.25 : -0.25); }
+}
+function finirRepas(e) {
+  const s = e.s, P = PLATS[e.repas?.plat] || PLATS.pates, D = DESSERTS[e.repas?.dessert] || DESSERTS.aucun, g = goutsDe(s.nom);
+  let bonus = P.humeur + D.humeur;
+  if (e.repas?.plat === g.aime) { bonus += 10; toast(`${s.nom} adore ${P.le} !`, 'or'); }
+  else if (e.repas?.plat === g.deteste) { bonus -= 6; toast(`${s.nom} n’aime pas ${P.le}…`, 'rouge'); }
+  s.faim = 100; s.humeur = clamp(s.humeur + bonus, 0, 100);
+  asseoir(e, false); assiettes[e.place_cantine] && (assiettes[e.place_cantine].visible = false);
+  e.repas = null; e.place_cantine = null; e.p.g.position.set(e.x, 0, e.z);
+  if (enfantsDebout()) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e);
+}
 function panneauGite() {
   const fiches = [...Array(CHAMBRES).keys()].map(i => {
     const s = etat.stagiaires.find(t => t.chambre === i);
@@ -4485,7 +4598,7 @@ function panneauGite() {
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -5110,6 +5223,7 @@ const interactions = [
   { x: PORTE_GITE.x, z: PORTE_GITE.z, r: 3.5, texte: () => 'Entrer au gîte des cavaliers', action: () => panneauGite() },
   { x: MAISON.x + 3.5, z: MAISON.z + 1.3, r: 1.7, texte: () => etat.heure >= 18 || etat.heure < 6 ? 'Dormir dans ton lit' : 'Ton lit (on dort après 18 h)', action: () => dormir() },
   { x: MAISON.x - 2, z: MAISON.z - 1.4, r: 1.9, texte: () => 'S’asseoir à la table : tes réserves et tes comptes', action: () => panneauMaison() },
+  { x: CANTINE.x + 2.6, z: CANTINE.z, r: 3.2, texte: () => 'Cantine : choisir le repas et appeler les enfants', action: () => panneauCantine() },
   { x: COMPTOIR.x, z: COMPTOIR.z - 1.2, r: 3.5, texte: () => 'Acheter et vendre au comptoir', action: () => comptoir() },
   { x: TABLEAU.x, z: TABLEAU.z, r: 4, texte: () => 'Régler le matériel de la carrière', action: tableauCarriere },
   { x: DEPART.x, z: DEPART.z, r: 4.5, texte: () => parcours.actif ? 'Abandonner le parcours' : concours?.attenteJoueur ? 'Prendre le départ du concours' : 'Lancer le parcours', action: () => basculerParcours('carriere') },
@@ -5314,6 +5428,7 @@ addEventListener('keydown', e => {
   if (l === 'm') toucheMonter();
   if (l === 'b') amenager();
   if (l === 'c') appelCours();
+  if (l === 'k') panneauCantine();
   if (lecon && /^(Digit|Numpad)[1-5]$/.test(e.code)) ordonner(ORDRES[+e.code.slice(-1) - 1][0]);
   if (l === 'f') nourrir(etat.pommes ? 'pomme' : 'carotte');
   if (concours && l === 'v') { vueConcours = !vueConcours; camPrete = false; }
@@ -5332,6 +5447,7 @@ $('#lecon').addEventListener('pointerdown', e => { const b = e.target.closest('[
 $('#b-aide').onclick = aide;
 $('#invite').onclick = e => { e.preventDefault(); interagir(); }; // toucher le cadre « E » = appuyer sur E
 $('#b-appel-cours').onclick = e => { e.currentTarget.blur(); appelCours(); };
+$('#b-cantine').onclick = e => { e.currentTarget.blur(); panneauCantine(); };
 // le bouton « Cours » : appeler les enfants d'où que l'on soit (au lieu d'aller les chercher au banc)
 function appelCours() {
   if (ouvert()) fermer();
@@ -5345,7 +5461,7 @@ function appelCours() {
     const b = $('#dormir-cours'); if (b) b.onclick = () => { dormir(); };
     return;
   }
-  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
+  if (!eleves.some(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine'].includes(e.etat))) { ouvrir(`<div class="pnj">Cours · ${h}</div><h2>Tous les enfants sont occupés</h2><p>Ils sont en cours, en sortie ou en concours.</p>`); return; }
   proposerLecon(null);
 }
 if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
@@ -5808,7 +5924,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
