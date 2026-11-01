@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 13:51";</script>
+<script>window.VERSION_JEU = "2026-11-01 14:01";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -460,7 +460,12 @@ function nouveauCheval(nom, race, robe, base, taille = 1) {
 }
 // âge des chevaux (2026-11-01) : un jour de jeu compte pour un an. Poulain : depuis sa naissance ; les autres : leur
 // âge à l'arrivée (age0) plus les jours passés depuis (jourAge0). Longe à 2 ans, monté à 3 ans, saut à 4 ans.
-const AGE_LONGE = 2, AGE_SAUT = 4;
+const AGE_LONGE = 2, AGE_SAUT = 4, AGE_DEBOURRAGE = 1;
+// débourrage (2026-11-01) : à partir d'un an, cinq étapes dans l'ordre (c.debourrage = étapes faites) ; une fois débourré
+// (c.debourre), un cheval né au ranch peut être monté. Les chevaux achetés ou apprivoisés arrivent débourrés.
+const ETAPES_DEBOURRAGE = [['licol', 'Licol et marche en main', 'Il suit tranquillement au bout de la longe'], ['toucher', 'Le toucher partout, lui prendre les pieds', 'Il se laisse toucher et donne ses pieds'],
+  ['selle', 'Tapis et selle sur le dos', 'Il accepte la selle, la sangle serrée doucement'], ['filet', 'Le filet et le mors', 'Il mâchonne son mors sans s’inquiéter'], ['cavalier', 'Premier cavalier sur son dos', 'Premiers pas avec un cavalier sur le dos !']];
+const debourre = c => c.naissance == null || !!c.debourre;
 const ageCheval = c => c.naissance != null ? Math.max(0, etat.jour - c.naissance) : (c.age0 ?? 6) + Math.max(0, etat.jour - (c.jourAge0 ?? etat.jour));
 const auPre = id => { const n = prePar(id)?.nom ?? 'pré'; return /^Nurserie/.test(n) ? 'à la nurserie des poulains' : `au ${n.charAt(0).toLowerCase() + n.slice(1)}`; };
 const ageTexte = c => { const a = ageCheval(c); return a < 1 ? 'moins d’un an' : `${a} an${a > 1 ? 's' : ''}`; };
@@ -3190,6 +3195,12 @@ function aupresDuCheval(r) {
       <div class="jauge" style="margin:4px 0 8px"><i style="width:${c.elevage || 0}%;background:var(--or)"></i></div>
       <p class="note">Points d’élevage : ${c.elevage || 0} %. Bien élevé, il gagnera jusqu’à 3 niveaux de plus en devenant adulte.</p>
       <div class="boutons">${SOINS_POULAIN.map(([k, l]) => { const reste = Math.ceil(90 - (maintenant() - (derniersSoins[c.id + 'p' + k] ?? -999))); return `<button class="btn ${reste > 0 ? '' : 'or'}" data-poulain="${k}" ${reste > 0 ? 'disabled' : ''}>${l}${reste > 0 ? ` · ${reste} s` : ''}</button>`; }).join('')}</div>` : ''}
+    ${c.naissance != null && !c.debourre ? (ageCheval(c) < AGE_DEBOURRAGE ? `<h3 class="section">Débourrage</h3><p class="note">Le débourrage commence à 1 an. ${c.nom} a ${ageTexte(c)}.</p>`
+      : `<h3 class="section">Débourrage · ${c.debourrage || 0} étape${(c.debourrage || 0) > 1 ? 's' : ''} sur ${ETAPES_DEBOURRAGE.length}</h3>
+      <div class="jauge" style="margin:4px 0 8px"><i style="width:${(c.debourrage || 0) / ETAPES_DEBOURRAGE.length * 100}%;background:var(--vert)"></i></div>
+      ${ETAPES_DEBOURRAGE.map(([k, l], i) => { const fait = i < (c.debourrage || 0), suivant = i === (c.debourrage || 0), reste = Math.ceil(60 - (maintenant() - (derniersSoins[c.id + 'deb'] ?? -999)));
+        return `<div style="margin:3px 0">${fait ? `<span style="color:var(--vert);font-weight:800">Fait</span> · ${l}` : suivant ? `<button class="btn ${reste > 0 ? '' : 'or'}" data-debourrer="${k}" ${reste > 0 ? 'disabled' : ''}>${i + 1}. ${l}${reste > 0 ? ` · ${reste} s` : ''}</button>` : `<span style="opacity:.55">${i + 1}. ${l}</span>`}</div>`; }).join('')}
+      <p class="note">Une étape à la fois, une minute entre deux. Une fois débourré, tu pourras le monter.</p>`) : ''}
     <h3 class="section">Licol${c.licol && c.licolC == null ? ` : ${LICOLS[c.licol]?.nom.toLowerCase()}` : ''}</h3>
     <div class="boutons">${mesLicols().map(k => `<button class="btn ${c.licol === k ? 'or' : ''}" data-licol="${k}"><span class="robe" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;background:${hex(LICOLS[k].c)}"></span>${LICOLS[k].nom}</button>`).join('')}
       ${c.licol ? '<button class="btn" data-licol="">Enlever le licol</button>' : ''}</div>
@@ -3209,6 +3220,13 @@ function aupresDuCheval(r) {
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
   });
   $('#contenu').querySelectorAll('[data-poulain]').forEach(b => b.onclick = () => soignerPoulain(c, b.dataset.poulain, r));
+  $('#contenu').querySelectorAll('[data-debourrer]').forEach(b => b.onclick = () => {
+    const i = c.debourrage || 0, et = ETAPES_DEBOURRAGE[i]; if (!et || et[0] !== b.dataset.debourrer) return;
+    derniersSoins[c.id + 'deb'] = maintenant(); c.debourrage = i + 1; gagnerXp(c, 'lien', 5);
+    if (c.debourrage >= ETAPES_DEBOURRAGE.length) { c.debourre = true; etat.compteurs.debourres = (etat.compteurs.debourres || 0) + 1; toast(`Bravo ! ${c.nom} est débourré${c.sexe === 'jument' ? 'e' : ''} : tu peux ${c.sexe === 'jument' ? 'la' : 'le'} monter (M)`, 'or'); sonPiece(); }
+    else toast(`${c.nom} : ${et[2]}`, 'or');
+    son(520, 0.1, 'triangle', 0.05); sauver(); aupresDuCheval(r);
+  });
   $('#contenu').querySelectorAll('[data-licol]').forEach(b => b.onclick = () => {
     c.licol = b.dataset.licol || null; c.licolC = null; toast(c.licol ? `${c.nom} porte son licol ${LICOLS[c.licol].nom.toLowerCase()}` : `Licol enlevé à ${c.nom}`);
     majResidents(); sauver(); const nr = residents.find(x => x.cheval === c); if (nr) aupresDuCheval(nr); else fermer();
@@ -4193,7 +4211,7 @@ function nomLibre() {
 function monter(id) {
   const c = etat.chevaux.find(h => h.id === id);
   if (!c || (id === etat.actif && !etat.aPied)) return;
-  if (!adulte(c)) { toast(`${c.nom} n’a que ${ageTexte(c)} : on le monte à ${AGE_ADULTE} ans (encore ${AGE_ADULTE - ageCheval(c)} jour${AGE_ADULTE - ageCheval(c) > 1 ? 's' : ''} de jeu)`, 'rouge'); return; }
+  if (!debourre(c)) { toast(ageCheval(c) < AGE_DEBOURRAGE ? `${c.nom} n’a que ${ageTexte(c)} : on commence son débourrage à 1 an, puis on pourra le monter` : `${c.nom} n’est pas encore débourré${c.sexe === 'jument' ? 'e' : ''} : fais les étapes du débourrage (E à côté de ${c.sexe === 'jument' ? 'elle' : 'lui'})`, 'rouge'); return; }
   if (c.lieu === 'box' && c.box != null) ouvrirPorteBox(c.box);
   const r = residents.find(x => x.cheval.id === id);
   if (!etat.aPied) { const a = chevalActif(); a.lieu = 'libre'; a.pos = { x: J.x, z: J.z, rot: J.rot }; } // l'ancien cheval reste là où tu étais
