@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 15:18";</script>
+<script>window.VERSION_JEU = "2026-11-01 15:23";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -327,8 +327,12 @@ const ROBES = {
   blanc:    { nom: 'Blanc',     corps: 0xf1eee8, crin: 0xe6e1d8, jambes: 0xece8e1 },
   pieAlezan:{ nom: 'Pie alezan', corps: 0xf2efe8, crin: 0xb8693a, jambes: 0xf2efe8, taches: 0x9a4b22 },
 };
-const STATS = [['vitesse', 'Vitesse'], ['saut', 'Saut'], ['endurance', 'Endurance'], ['lien', 'Lien']];
+const STATS = [['vitesse', 'Vitesse'], ['saut', 'Saut'], ['dressage', 'Dressage'], ['endurance', 'Endurance'], ['lien', 'Lien']]; // dressage : depuis le 2026-11-01
 const NOM_STAT = Object.fromEntries(STATS);
+// points de compétence (2026-11-01) : les niveaux de Dressage et de Saut ; un cheval de dressage en a beaucoup en
+// dressage et très peu en saut, un cheval de saut l'inverse
+const specialiteDe = c => RACES[c.race]?.specialite || (c.stats.dressage && c.stats.dressage.niv - c.stats.saut.niv >= 3 ? 'dressage' : c.stats.dressage && c.stats.saut.niv - c.stats.dressage.niv >= 3 ? 'saut' : null);
+const competencesTexte = c => `${specialiteDe(c) === 'dressage' ? 'Cheval de dressage · ' : specialiteDe(c) === 'saut' ? 'Cheval de saut · ' : ''}points de compétence : dressage ${c.stats.dressage?.niv ?? 1}, saut ${c.stats.saut.niv}`;
 // licols (2026-10-12) : le rouge est offert, les autres chez Lucien au marché ; c.licol = la couleur portée (ou rien)
 const LICOLS = { rouge: { nom: 'Rouge', c: 0xc0392b, prix: 0 }, bleu: { nom: 'Bleu', c: 0x2f6fb5, prix: 15 }, rose: { nom: 'Rose', c: 0xe77fb3, prix: 15 },
   vert: { nom: 'Vert', c: 0x2f9e5a, prix: 15 }, violet: { nom: 'Violet', c: 0x7d4fb0, prix: 20 }, jaune: { nom: 'Jaune', c: 0xf3b52d, prix: 20 }, noir: { nom: 'Noir', c: 0x222222, prix: 15 } };
@@ -348,16 +352,19 @@ const couleurCouv = c => c.couvC ?? COUVERTURES[c.couverture]?.c;
 const RACES = {
   'Poney de selle':      { robe: 'palomino', taille: 0.94, forme: { largeur: 1.05, jambes: 0.9 } },
   'Cheval de la plaine': { robe: 'bai', taille: 1 },
-  'Shetland':            { robe: 'pie', prix: 120, taille: 0.72, forme: { largeur: 1.22, jambes: 0.78, crinLong: true }, base: { vitesse: 1, saut: 2, endurance: 3, lien: 3 }, texte: 'Tout petit, très costaud et très câlin.' },
-  'Haflinger':           { robe: 'alezan', crin: 0xefdcae, prix: 200, taille: 0.95, forme: { largeur: 1.15, jambes: 0.9, crinLong: true }, base: { vitesse: 2, saut: 2, endurance: 4, lien: 3 }, texte: 'Robe dorée et crins blonds, gentil et endurant.' },
-  'Pur-sang':            { robe: 'bai', prix: 250, taille: 1.05, forme: { largeur: 0.9, jambes: 1.06 }, base: { vitesse: 4, saut: 2, endurance: 3, lien: 1 }, texte: 'Fin et rapide, né pour la course.' },
-  'Quarter Horse':       { robe: 'isabelle', prix: 330, taille: 0.98, forme: { largeur: 1.1, jambes: 0.95 }, base: { vitesse: 4, saut: 3, endurance: 3, lien: 2 }, texte: 'Musclé et vif, le roi de la monte western.' },
-  'Selle Français':      { robe: 'alezan', prix: 400, taille: 1.08, base: { vitesse: 3, saut: 4, endurance: 3, lien: 1 }, texte: 'Le grand sauteur des concours.' },
-  'Arabe':               { robe: 'gris', prix: 480, taille: 0.97, forme: { largeur: 0.88, jambes: 1.03, queueHaute: true }, base: { vitesse: 4, saut: 3, endurance: 5, lien: 1 }, texte: 'Léger, queue en panache, infatigable sur la distance.' },
-  'Frison':              { robe: 'noir', prix: 550, taille: 1.1, forme: { largeur: 1.12, jambes: 0.96, crinLong: true, fanons: true }, base: { vitesse: 3, saut: 3, endurance: 5, lien: 2 }, texte: 'Noir de jais, longue crinière et fanons aux pieds.' },
-  'Cheval de trait':     { robe: 'bai', prix: 600, taille: 1.18, forme: { largeur: 1.32, jambes: 0.92, fanons: 'blanc' }, base: { vitesse: 2, saut: 1, endurance: 6, lien: 3 }, texte: 'Une force tranquille, avec de grands fanons blancs.' },
-  'Appaloosa':           { robe: 'appaloosa', prix: 700, taille: 1.0, forme: { largeur: 1.03 }, base: { vitesse: 4, saut: 4, endurance: 4, lien: 2 }, texte: 'Robe tachetée unique, bon à tout faire.' },
-  'Pure race espagnole': { robe: 'gris', prix: 900, taille: 1.05, forme: { largeur: 1.06, crinLong: true }, base: { vitesse: 5, saut: 5, endurance: 4, lien: 2 }, texte: 'Élégant et brillant, longue crinière ondulée.' },
+  'Shetland':            { robe: 'pie', prix: 120, taille: 0.72, forme: { largeur: 1.22, jambes: 0.78, crinLong: true }, base: { vitesse: 1, saut: 2, dressage: 2, endurance: 3, lien: 3 }, texte: 'Tout petit, très costaud et très câlin.' },
+  'Haflinger':           { robe: 'alezan', crin: 0xefdcae, prix: 200, taille: 0.95, forme: { largeur: 1.15, jambes: 0.9, crinLong: true }, base: { vitesse: 2, saut: 2, dressage: 3, endurance: 4, lien: 3 }, texte: 'Robe dorée et crins blonds, gentil et endurant.' },
+  'Pur-sang':            { robe: 'bai', prix: 250, taille: 1.05, forme: { largeur: 0.9, jambes: 1.06 }, base: { vitesse: 4, saut: 2, dressage: 1, endurance: 3, lien: 1 }, texte: 'Fin et rapide, né pour la course.' },
+  'Quarter Horse':       { robe: 'isabelle', prix: 330, taille: 0.98, forme: { largeur: 1.1, jambes: 0.95 }, base: { vitesse: 4, saut: 3, dressage: 2, endurance: 3, lien: 2 }, texte: 'Musclé et vif, le roi de la monte western.' },
+  'Selle Français':      { robe: 'alezan', prix: 400, taille: 1.08, specialite: 'saut', base: { vitesse: 3, saut: 6, dressage: 1, endurance: 3, lien: 1 }, texte: 'Cheval de saut : le grand sauteur des concours, très peu de dressage.' },
+  'KWPN sauteur':        { robe: 'bai', prix: 750, taille: 1.1, specialite: 'saut', base: { vitesse: 4, saut: 7, dressage: 2, endurance: 4, lien: 2 }, texte: 'Cheval de saut hollandais : il franchit tout, mais le dressage l’ennuie.' },
+  'Arabe':               { robe: 'gris', prix: 480, taille: 0.97, forme: { largeur: 0.88, jambes: 1.03, queueHaute: true }, base: { vitesse: 4, saut: 3, dressage: 3, endurance: 5, lien: 1 }, texte: 'Léger, queue en panache, infatigable sur la distance.' },
+  'Frison':              { robe: 'noir', prix: 550, taille: 1.1, forme: { largeur: 1.12, jambes: 0.96, crinLong: true, fanons: true }, base: { vitesse: 3, saut: 2, dressage: 4, endurance: 5, lien: 2 }, texte: 'Noir de jais, longue crinière et fanons aux pieds.' },
+  'Cheval de trait':     { robe: 'bai', prix: 600, taille: 1.18, forme: { largeur: 1.32, jambes: 0.92, fanons: 'blanc' }, base: { vitesse: 2, saut: 1, dressage: 1, endurance: 6, lien: 3 }, texte: 'Une force tranquille, avec de grands fanons blancs.' },
+  'Appaloosa':           { robe: 'appaloosa', prix: 700, taille: 1.0, forme: { largeur: 1.03 }, base: { vitesse: 4, saut: 4, dressage: 3, endurance: 4, lien: 2 }, texte: 'Robe tachetée unique, bon à tout faire.' },
+  'Pure race espagnole': { robe: 'gris', prix: 900, taille: 1.05, forme: { largeur: 1.06, crinLong: true }, specialite: 'dressage', base: { vitesse: 4, saut: 2, dressage: 7, endurance: 4, lien: 2 }, texte: 'Cheval de dressage : élégant et brillant, longue crinière ondulée ; il saute très peu.' },
+  'Lusitanien':          { robe: 'isabelle', prix: 650, taille: 1.03, forme: { largeur: 1.05, crinLong: true }, specialite: 'dressage', base: { vitesse: 3, saut: 1, dressage: 6, endurance: 4, lien: 3 }, texte: 'Cheval de dressage portugais : souple et attentif, presque pas de saut.' },
+  'Hanovrien de dressage': { robe: 'noir', prix: 820, taille: 1.1, specialite: 'dressage', base: { vitesse: 3, saut: 2, dressage: 7, endurance: 4, lien: 2 }, texte: 'Grand cheval de dressage allemand, des allures magnifiques ; un tout petit peu de saut.' },
 };
 const BOUTIQUE = Object.entries(RACES).filter(([, r]) => r.prix).map(([race, r]) => ({ race, ...r }));
 const hauteurGarrot = r => (1.22 * (r.forme?.jambes || 1) + 0.42) * (r.taille || 1);
@@ -474,7 +481,7 @@ const ageCheval = c => c.naissance != null ? Math.max(0, etat.jour - c.naissance
 const auPre = id => { const n = prePar(id)?.nom ?? 'pré'; return /^Nurserie/.test(n) ? 'à la nurserie des poulains' : `au ${n.charAt(0).toLowerCase() + n.slice(1)}`; };
 const ageTexte = c => { const a = ageCheval(c); return a < 1 ? 'moins d’un an' : `${a} an${a > 1 ? 's' : ''}`; };
 function etatNeuf() {
-  const c = nouveauCheval('Caramel', 'Poney de selle', 'palomino', { vitesse: 2, saut: 2, endurance: 2, lien: 2 }, 0.94);
+  const c = nouveauCheval('Caramel', 'Poney de selle', 'palomino', { vitesse: 2, saut: 2, dressage: 2, endurance: 2, lien: 2 }, 0.94);
   return {
     v: 1, vu: false, pieces: 50, pommes: 0, carottes: 3, chevaux: [c], actif: c.id, quete: 0, base: 0,
     compteurs: { carriere: 0, pommes: 0, sauts: 0, dressages: 0, apprivoises: 0, parcours: 0, sansfaute: 0, champion: 0, lac: 0, lecons: 0, confirmes: 0 },
@@ -1857,14 +1864,15 @@ function majDressageCarre(dt) {
     else if (dist < 2.2 && v >= 0.6 && D.arret === 0) { /* il faut s'arrêter */ }
     else if (dist > 4 && D.vuArret) { D.mFig += 1.5; D.i++; toast('Pas d’arrêt en X…', 'rouge'); majReperes(); }
     if (dist < 2.2) D.vuArret = true;
-  } else if (dist < 1.9) {
-    D.mFig += 1; D.pFig += (bonneAllure ? 0.7 : 0.25) + 0.3 * clamp(1 - dist / 1.9, 0, 1); D.i++; majReperes();
+  } else if (dist < 1.9) { // un cheval de dressage (beaucoup de points de compétence) fait des figures plus justes
+    const dr = chevalActif().stats.dressage?.niv ?? 1;
+    D.mFig += 1; D.pFig += (bonneAllure ? 0.55 : 0.2) + 0.25 * clamp(1 - dist / 1.9, 0, 1) + 0.2 * Math.min(1, dr / 7); D.i++; majReperes();
   } else { // un repère manqué : si le suivant est plus proche, on passe au suivant (compté comme raté)
     const q = F.pts[D.i + 1]; if (q && Math.hypot(J.x - q.x, J.z - q.z) < 1.9) { D.mFig += 1; D.i++; majReperes(); }
   }
   if (D.i >= F.pts.length) {
     const note = Math.round(D.pFig / Math.max(1, D.mFig) * 100) / 10; D.notes.push(note);
-    const [stat, n] = F.xp; gagnerXp(chevalActif(), stat, Math.round(n * note / 10) + 1);
+    const [stat, n] = F.xp; gagnerXp(chevalActif(), stat, Math.round(n * note / 10) + 1); gagnerXp(chevalActif(), 'dressage', Math.round(4 * note / 10) + 1);
     const m = etat.dressageNotes ||= {}; if (!D.reprise && (m[D.figs[D.f]] == null || note > m[D.figs[D.f]])) m[D.figs[D.f]] = note;
     if (D.f + 1 < D.figs.length) { toast(`${F.nom} : ${note}/10. Figure suivante : ${FIGURES[D.figs[D.f + 1]].nom}`, 'or'); D.f++; placerReperes(); }
     else finirDressageCarre(false);
@@ -3387,7 +3395,7 @@ function lacher(r) {
 }
 function aupresDuCheval(r) {
   const c = r.cheval, lieu = c.lieu === 'pre' ? ` · ${auPre(c.pre)}` : ' · en liberté';
-  ouvrir(`<div class="pnj">${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${lieu}</div><h2>${c.nom}</h2>${besoinsHtml(c)}${blocStats(c.stats)}
+  ouvrir(`<div class="pnj">${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${lieu}</div><h2>${c.nom}</h2><p class="note" style="color:var(--or);font-weight:800;margin:0 0 6px">${competencesTexte(c)}</p>${besoinsHtml(c)}${blocStats(c.stats)}
     <div class="boutons" style="margin-top:12px">
       <button class="btn or" data-a="monter">Monter <kbd>M</kbd></button>
       <button class="btn" data-a="foin">Donner du foin</button><button class="btn" data-a="eau">Donner à boire</button>
@@ -4531,7 +4539,7 @@ function ecurie() {
       <div class="fiche-tete"><span class="robe" style="background:${hex((ROBES[c.robe] || ROBES.bai).corps)}"></span>
         <div style="min-width:0;flex:1"><input id="nom-${c.id}" data-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}" maxlength="16" aria-label="Nom du cheval">
         <small>${c.race} · ${sexeTexte(c)} · ${ageTexte(c)}${c.naissance && !adulte(c) ? ` · poulain · élevage ${c.elevage || 0} %` : ''}${c.pleine ? ' · pleine' : ''} · ${(ROBES[c.robe] || ROBES.bai).nom}${c.box != null ? ` · box ${c.box + 1}` : ''}${c.lieu === 'pre' && !actif ? ` · ${auPre(c.pre)}` : ''}${c.lieu === 'libre' && !actif ? ' · en liberté' : ''}</small></div></div>
-      ${besoinsHtml(c)}${blocStats(c.stats)}
+      ${besoinsHtml(c)}<small style="color:var(--or);font-weight:800">${competencesTexte(c)}</small>${blocStats(c.stats)}
       <small>La barre montre l’expérience vers le niveau suivant.</small>
       <div class="boutons">
         ${actif ? '<button class="btn" disabled>Tu le montes</button>' : `<button class="btn or" data-monter="${c.id}">Monter</button>`}
@@ -4964,7 +4972,7 @@ function chevalStagiaire(niveau) {
   const race = pick(niveau <= 2 ? ['Poney de selle', 'Haflinger', 'Cheval de la plaine'] : ['Selle Français', 'Quarter Horse', 'Arabe', 'Appaloosa', 'Pur-sang', 'Frison', 'Haflinger']);
   const R = RACES[race] || {}, pris = new Set(etat.chevaux.map(c => c.nom).concat(etat.stagiaires.map(s => s.cheval.nom)));
   const libres = NOMS.filter(n => !pris.has(n)), nom = libres.length ? pick(libres) : 'Opale', robe = Math.random() < 0.6 ? (R.robe || 'bai') : pick(Object.keys(ROBES));
-  return nouveauCheval(nom, race, robe, { vitesse: Math.min(8, 2 + Math.floor(niveau / 3)), saut: Math.min(8, 3 + Math.floor(niveau / 3)), endurance: 3, lien: niveau <= 2 ? 4 : 3 }, R.taille || 1);
+  return nouveauCheval(nom, race, robe, { vitesse: Math.min(8, 2 + Math.floor(niveau / 3)), saut: Math.min(8, 3 + Math.floor(niveau / 3)), dressage: Math.min(8, 2 + Math.floor(niveau / 3)), endurance: 3, lien: niveau <= 2 ? 4 : 3 }, R.taille || 1);
 }
 function creerEleve(s, x, z, etatInit) {
   const p = pieton(`${s.nom} · stagiaire`, s.haut, s.cheveux, s.genre), f = ficheEleve(s.nom);
@@ -5829,6 +5837,7 @@ function dialogueMargaux() {
 const EXOS = {
   vitesse:   { titre: 'Transitions',     texte: 'Passer du pas au galop pile au signal.',     vit: 1.15, tours: 5 },
   saut:      { titre: 'Cavalettis',      texte: 'Poser les foulées juste devant les barres.', vit: 1.4,  tours: 5 },
+  dressage:  { titre: 'Figures de manège', texte: 'Cessions et transitions bien rythmées, le cheval bien rond.', vit: 1.05, tours: 6 },
   endurance: { titre: 'Longe au galop',  texte: 'Garder le rythme, tour après tour.',         vit: 0.95, tours: 7 },
   lien:      { titre: 'Travail à pied',  texte: 'Calme et douceur : la confiance se gagne.',  vit: 0.75, tours: 5 },
 };
@@ -6763,6 +6772,7 @@ function demarrer(donnees = {}) {
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
+  for (const c of [...etat.chevaux, ...etat.stagiaires.map(t => t.cheval).filter(Boolean)]) if (!c.stats.dressage) c.stats.dressage = { niv: RACES[c.race]?.base?.dressage ?? 2, xp: 0 };
   for (const c of etat.chevaux) if (c.naissance == null && c.age0 == null) { c.age0 = 5 + ([...c.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) % 8); c.jourAge0 = etat.jour; }
   etat.tapis ||= ['uni']; for (const x in etatsStage) delete etatsStage[x];
   construire(); construireSellerie(); NAV.b = null; remettreStagiaires();
