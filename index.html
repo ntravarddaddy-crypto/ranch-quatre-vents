@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-01 20:03";</script>
+<script>window.VERSION_JEU = "2026-11-02 18:55";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -143,6 +143,7 @@ kbd{font-family:var(--f-texte);font-size:11px;font-weight:800;background:rgba(25
 .note{color:var(--texte-doux);font-size:12px;margin-top:14px!important}
 #enchere-choix{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(480px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 #ec-oui{background:var(--vert)!important;color:#fff}
+#ec-oui:disabled{opacity:.45;cursor:default}
 #longe{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
 .nuancier{display:flex;flex-wrap:wrap;gap:6px}.pastille{width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.35);padding:0;cursor:pointer}.pastille.on{outline:3px solid var(--or);outline-offset:2px}
 #lecon{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(540px,calc(100vw - 32px));display:flex;flex-direction:column;gap:7px}
@@ -418,6 +419,12 @@ const CARRES_DR = { val: { nom: 'Écurie du Val', C: { x1: 140, x2: 160, z1: 38,
 // Équitalion (2026-11-01) : le grand manège couvert où concourent les meilleurs cavaliers ; on n'y va que sur invitation
 // de sa gérante, qui vient te trouver elle-même, et seulement si tu es déjà monté(e) sur le podium
 const EQUITALION = { nom: 'Équitalion', x1: 55, x2: 99, z1: -128, z2: -100, h: 1.3, niv: [12, 16], couleur: 0x22335a, texte: 'Le grand concours des meilleurs cavaliers, sous le toit d’Équitalion', equitalion: true };
+// Grande Foire des Ranchs (2026-11-02) : au sud-ouest, tous les ranchs s'y réunissent pour une grande vente aux
+// enchères. Un carré de dressage (le ring des ventes) et une piste d'obstacles côte à côte ; on y va sur invitation,
+// pour montrer et vendre son plus beau cheval, ou pour acheter ceux des autres ranchs.
+const FOIRE = { C: { x1: -150, x2: -130, z1: -178, z2: -138 }, S: { x1: -122, x2: -94, z1: -176, z2: -150 }, panneau: { x: -134, z: -133 }, arrivee: { x: -123, z: -152 } };
+const R_FOIRE = { x: -140, z: -158, rx: 7.5, rz: 17 };
+const RANCHS_FOIRE = ['Haras Royal', 'Écurie des Étoiles', 'Écurie Prestige', 'Haras de la Source', 'Poney-club des Lilas', 'Écurie du Moulin', 'Ranch des Jardins', 'Domaine des Tilleuls'];
 const lieuInv = inv => LIEUX_CONCOURS[inv.lieu] || CARRES_DR[inv.lieu] || (inv.lieu === 'equitalion' ? EQUITALION : null);
 // carré de dressage (2026-11-01) : 20 × 40 m à l'ouest du paddock de reproduction, A au sud (entrée), C au nord
 const CARRE = { x1: -100, x2: -80, z1: -12, z2: 28 };
@@ -1574,7 +1581,7 @@ let cuisiniere = null;
 // commissaire-priseur à l'ouest. Les acheteurs (ACHETEURS) sont assis sur la tribune.
 const ACHETEURS = ['M. Bernard', 'Mme Petit', 'Hugo', 'Sophie', 'Marcel', 'Claire', 'Antoine', 'Lucie'];
 const PLACES_ACHETEURS = ACHETEURS.map((_, i) => { const k = i % 2, j = Math.floor(i / 2); return { x: VENTE.x - 5.4 + j * 3.6 + k * 1.2, z: VENTE.z - 7.4 - k * 1.2, siege: 0.62 + k * 0.55 }; });
-let acheteurs = [], gaspard = null;
+let acheteurs = [], gaspard = null, acheteursFoire = [], crieurFoire = null;
 {
   const V = VENTE, g = new THREE.Group(), toit = new THREE.Group(); scene.add(g); scene.add(toit);
   disque(V.x, V.z, 1, sableMat(4, 4), 0.025).scale.set(8, 4.6, 1);
@@ -1603,6 +1610,17 @@ function construireVente() {
     const a = { nom, p, pl, leve: 0, bulle: null }; asseoirAcheteur(a, true); return a;
   });
   gaspard = pieton('Maître Gaspard · ventes aux enchères', 0x222222, 0xb8b2a8, 'm'); gaspard.g.position.set(VENTE.x - 10.2, 0.5, VENTE.z); gaspard.g.rotation.y = Math.PI / 2; scene.add(gaspard.g);
+  // Grande Foire : un représentant de chaque ranch sur les bancs le long du carré, tourné vers lui
+  for (const a of acheteursFoire) scene.remove(a.p.g);
+  if (crieurFoire) scene.remove(crieurFoire.g);
+  const C = FOIRE.C, cz = (C.z1 + C.z2) / 2;
+  acheteursFoire = RANCHS_FOIRE.map((nom, i) => {
+    const k = i % 2, j = Math.floor(i / 2), pl = { x: C.x2 + 2 + k * 0.9, z: cz - 12 + j * 7 + k * 1.5, siege: 0.56 + k * 0.45 };
+    const p = pieton(nom, couleurs[i], [0x6b3a1e, 0x2a2420, 0xd9a441, 0x8a4320, 0xb8b2a8][i % 5], i % 3 ? 'f' : 'm');
+    p.g.rotation.y = -Math.PI / 2; scene.add(p.g);
+    const a = { nom, p, pl, leve: 0, bulle: null }; asseoirAcheteur(a, true); return a;
+  });
+  crieurFoire = pieton('Maître Armand · Grande Foire', 0x5a1c1c, 0x2a2420, 'm'); crieurFoire.g.position.set((C.x1 + C.x2) / 2 + 5, 0.5, C.z2 + 2.6); crieurFoire.g.rotation.y = Math.PI; scene.add(crieurFoire.g);
 }
 function asseoirAcheteur(a, assis) {
   const pl = a.pl, h = a.p;
@@ -1862,7 +1880,7 @@ function panneauDressage() {
 function commencerDressageCarre(figs, reprise = false, opts = {}) {
   if (etat.aPied) { toast('Monte à cheval pour faire ta figure (M)', 'rouge'); return; }
   if (!opts.concours && (parcours.actif || concours || concoursDr || lecon || (balade && balade.type !== 'dressage'))) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
-  fermer(); dressageCarre = { figs, f: 0, i: 0, points: 0, max: 0, reprise, arret: 0, notes: [], jeu: opts.jeu || FIGURES, concours: !!opts.concours }; placerReperes(); son(660, 0.12, 'triangle', 0.05);
+  fermer(); dressageCarre = { figs, f: 0, i: 0, points: 0, max: 0, reprise, arret: 0, notes: [], jeu: opts.jeu || FIGURES, concours: !!opts.concours, foire: !!opts.foire }; placerReperes(); son(660, 0.12, 'triangle', 0.05);
   const F0 = dressageCarre.jeu[figs[0]]; toast(`${F0.nom} : passe les repères dans l’ordre, au ${F0.allure}`, 'or');
 }
 function placerReperes() {
@@ -1902,6 +1920,7 @@ function majDressageCarre(dt) {
 }
 function finirDressageCarre(arrete) {
   const D = dressageCarre; dressageCarre = null; if (reperesCarre) { scene.remove(reperesCarre); reperesCarre = null; }
+  if (D?.foire) { const note = arrete || !D.notes.length ? 0 : Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10; if (arrete) { toast('Démonstration arrêtée'); return; } foireApresDemo('dressage', note); return; }
   if (D?.concours) { const note = arrete || !D.notes.length ? 0 : Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10; toast(`Ta reprise : ${fr(note, 1)}/10`, note >= 7 ? 'or' : ''); noteJoueurConcoursDr(note); return; }
   if (!D || arrete) { if (D) toast('Figure arrêtée'); return; }
   const note = Math.round(D.notes.reduce((a, b) => a + b, 0) / D.notes.length * 10) / 10, gain = Math.round(note * (D.reprise ? 6 : 2));
@@ -1956,6 +1975,36 @@ function construireLieux() { // sable, lices blanches avec une entrée à l'oues
       spectateurs.push({ p, x: p.g.position.x, z: p.g.position.z, siege: 0.62 + k * 0.5 });
     }
     regrouper(n0, cx, cz, 170);
+  }
+  { // Grande Foire : le carré (ventes et dressage) avec les bancs des acheteurs, la piste d'obstacles et ses gradins, les vans des ranchs
+    const F = FOIRE, n0 = scene.children.length, S = F.S, g = new THREE.Group(); scene.add(g);
+    construireCarre(F.C, 'Grande Foire · ring des ventes', false); FOIRE.jeu = figuresDe(F.C); scene.children[scene.children.length - 1].position.y = 7; // nom bien au-dessus : il cachait le carré
+    const cxS = (S.x1 + S.x2) / 2;
+    dalle(S.x1, S.z1, S.x2, S.z2, sableMat(5, 4, 0xf0e2c2), 0.03);
+    cloture(S.x1, S.z1, S.x2, S.z1, true, true, g); cloture(S.x2, S.z1, S.x2, S.z2, true, true, g); cloture(S.x2, S.z2, S.x1, S.z2, true, true, g);
+    cloture(S.x1, S.z2, S.x1, S.z1 + 9, true, true, g); cloture(S.x1, S.z1 + 3, S.x1, S.z1, true, true, g);
+    for (let k = 0; k < 3; k++) { const h = 0.45 + k * 0.45; bloc(S.x2 - S.x1 - 4, 0.1, 0.9, MAT.bois, cxS, h, S.z2 + 1.6 + k * 0.9, g); bloc(S.x2 - S.x1 - 4, h, 0.08, MAT.bois, cxS, h / 2, S.z2 + 1.15 + k * 0.9, g); }
+    const cx = (F.C.x1 + F.C.x2) / 2;
+    bloc(2.4, 0.5, 2.2, MAT.bois, cx + 5, 0.25, F.C.z2 + 2.6, g); bloc(0.9, 1.1, 0.5, MAT.peint, cx + 5, 1.05, F.C.z2 + 1.9, g); // estrade du commissaire-priseur
+    for (const s2 of [-0.7, 0.7]) maille(cylGeo(0.06, 0.07, 1.8, 8), MAT.bois, F.panneau.x + s2, 0.9, F.panneau.z, g);
+    bloc(1.7, 1.1, 0.08, MAT.peint, F.panneau.x, 1.5, F.panneau.z, g);
+    const fanions = [0xc0392b, 0xf3b52d, 0x2f6fb5, 0x2e8b57, 0x7d3c98, 0xe67e22];
+    for (let i = 0; i < 14; i++) { const x = F.C.x1 - 2 + i * 5; maille(cylGeo(0.06, 0.07, 4.5, 8), MAT.peint, x, 2.25, -183, g); const d = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.7), robeMat(fanions[i % 6], 0.7)); d.position.set(x + 0.6, 4, -183); g.add(d); }
+    fusionner(g);
+    const ens = etiquette('Grande Foire des Ranchs', '#fbf1dc', 'rgba(150,40,40,.95)', 1.5); ens.position.set(-122, 6, -134); scene.add(ens);
+    const lp = etiquette('Grande Foire · panneau', '#fbf1dc', 'rgba(150,40,40,.95)', 0.55); lp.position.set(F.panneau.x, 2.5, F.panneau.z); scene.add(lp);
+    const ls = etiquette('Piste des démonstrations de saut', '#fbf1dc', 'rgba(150,40,40,.9)', 0.8); ls.position.set(cxS, 3.4, S.z2 + 4.5); scene.add(ls);
+    RANCHS_FOIRE.forEach((nom, i) => { // le van de chaque ranch, garé au nord
+      const x = -156 + i * 8.5, a = attelage(x, -125, Math.PI, [0x7a1c1c, 0xd9d9d6, 0x1c2a4a, 0x3a3a3a][i % 4], fanions[i % 6]);
+      const l = etiquette(nom, '#fbf1dc', 'rgba(38,25,15,.8)', 0.5); l.position.set(x, 3.2, -122); scene.add(l);
+    });
+    for (let i = 0; i < 16; i++) { // le public des démonstrations de saut
+      const k = i % 3, p = pieton(null, pick([0xe58fb4, 0x2e8b57, 0x2f6fb5, 0xe8b923, 0xc0392b, 0x7d3c98, 0xf2efe8]), pick([0x6b3a1e, 0x2a2420, 0xd9a441, 0x8a4320]));
+      p.g.position.set(S.x1 + 3 + i * 1.5, 0.56 + k * 0.45 - 0.95, S.z2 + 1.6 + k * 0.9); p.g.rotation.y = Math.PI; p.jambes.forEach(j => { j.rotation.x = -1.4; }); scene.add(p.g);
+      spectateurs.push({ p, x: p.g.position.x, z: p.g.position.z, siege: 0.56 + k * 0.45 });
+    }
+    regrouper(n0, -125, -158, 170);
+    construireObstFoire();
   }
   for (const D of Object.values(CARRES_DR)) { const n0 = scene.children.length; construireCarre(D.C, `${D.nom} · concours de dressage`, false); D.jeu = figuresDe(D.C); regrouper(n0, (D.C.x1 + D.C.x2) / 2, (D.C.z1 + D.C.z2) / 2, 160); }
 }
@@ -2021,6 +2070,9 @@ function nouvelleInvitation(dans = null) {
 function invitationsDuJour() { // à minuit : on retire les anciennes, il en arrive parfois une nouvelle
   const l = mesInvitations(); for (let i = l.length - 1; i >= 0; i--) if (l[i].jour < etat.jour) l.splice(i, 1);
   if (etat.monConcours?.jour === etat.jour) setTimeout(() => toast('C’est aujourd’hui ton concours ! Lance-le depuis le bouton Concours (J)', 'or'), 6000);
+  if (etat.foire && etat.foire.jour < etat.jour) etat.foire = null;
+  if (etat.foire?.jour === etat.jour && etat.foire.role) setTimeout(() => toast('C’est aujourd’hui la Grande Foire des Ranchs ! Pars depuis le bouton Concours (J)', 'or'), 7500);
+  if (!etat.foire && Math.random() < 0.35) { const F = nouvelleFoire(1 + Math.floor(Math.random() * 2)); setTimeout(() => toast(`Invitation à la Grande Foire des Ranchs, le jour ${F.jour} ! Réponds dans le bouton Concours (J)`, 'or'), 9000); }
   if (l.length < 3 && Math.random() < 0.75) { const inv = nouvelleInvitation(); setTimeout(() => toast(`Invitation : ${LIEUX_CONCOURS[inv.lieu].nom} t’invite au concours du jour ${inv.jour}, toi et tes élèves (bouton Concours, touche J)`, 'or'), 5200); }
 }
 function reponseEnfant(e, inv) {
@@ -2052,6 +2104,7 @@ function panneauInvitations() {
   ouvrir(`<div class="pnj">Courrier des concours · jour ${etat.jour}</div><h2>Invitations</h2>
     <p>Les clubs des environs t’invitent, toi et tes élèves. Demande à chacun s’il veut participer ; le jour venu, partez ensemble (inscription : 15 pièces par cavalier).</p>
     ${cartes || '<p class="note">Pas d’invitation pour le moment : il en arrive presque chaque nuit.</p>'}
+    ${blocFoire()}
     <p class="note"><b>Équitalion</b>, le grand manège couvert des meilleurs : sa gérante viendra elle-même t’inviter quand tu auras ${assezFort() ? 'déjà (elle passera bientôt !)' : 'une médaille d’or, ou deux médailles'}.</p>
     ${blocMonConcours()}`);
   const C = $('#contenu'), trouve = id => mesInvitations().find(x => x.id === id);
@@ -2062,7 +2115,7 @@ function panneauInvitations() {
   });
   C.querySelectorAll('[data-refuser]').forEach(b => b.onclick = () => { const l2 = mesInvitations(); l2.splice(l2.indexOf(trouve(b.dataset.refuser)), 1); sauver(); panneauInvitations(); });
   C.querySelectorAll('[data-partir]').forEach(b => b.onclick = () => partirAuConcours(trouve(b.dataset.partir)));
-  brancherMonConcours(C);
+  brancherMonConcours(C); brancherFoire(C);
 }
 // ---- Ton concours à toi (2026-11-01) : tu choisis le jour, tu envoies les invitations aux autres ranchs et clubs (ils
 // répondent oui ou non, avec combien de cavaliers), tu demandes à tes élèves ; le jour venu, les invités arrivent en van
@@ -2287,6 +2340,7 @@ lampe((MANEGE_C.x1 + MANEGE_C.x2) / 2, 6.6, (MANEGE_C.z1 + MANEGE_C.z2) / 2, fal
 // ------------------------------------------------------------------ Arbres, buissons, rochers, herbes, fleurs, roseaux, nuages
 const rng = mulberry32(11);
 function libre(x, z) {
+  if (x > -162 && x < -86 && z > -186 && z < -118) return false; // Grande Foire
   if (x > EQUITALION.x1 - 6 && x < EQUITALION.x2 + 6 && z > EQUITALION.z1 - 6 && z < EQUITALION.z2 + 10) return false;
   for (const D of Object.values(CARRES_DR)) if (x > D.C.x1 - 6 && x < D.C.x2 + 8 && z > D.C.z1 - 6 && z < D.C.z2 + 8) return false;
   for (const L of Object.values(LIEUX_CONCOURS)) if (x > L.x1 - 6 && x < L.x2 + 6 && z > L.z1 - 6 && z < L.z2 + 8) return false;
@@ -3837,7 +3891,7 @@ const ZONES_INTERDITES = [
   [MAISON.x - MAISON.hx - 2, MAISON.z - MAISON.hz - 3, MAISON.x + MAISON.hx + 2, MAISON.z + MAISON.hz + 2],
   [BOXES.x1 - 1, BOXES.z - BOXES.prof - 7, BOXES.x1 + BOXES.n * BOXES.l + 1, BOXES.z - BOXES.prof], [BOXES2.x1 - 1, BOXES2.z + BOXES2.prof, BOXES2.x1 + BOXES2.n * BOXES2.l + 1, BOXES2.z + BOXES2.prof + 7],
   [MARCHE.x1 - 4, MARCHE.z1 - 4, MARCHE.x2 + 4, MARCHE.z2 + 12], [REGIONAL.x1 - 8, REGIONAL.z1 - 4, REGIONAL.x2 + 4, REGIONAL.z2 + 14],
-  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [EQUITALION.x1 - 3, EQUITALION.z1 - 3, EQUITALION.x2 + 3, EQUITALION.z2 + 8], [CARRE.x1 - 2, CARRE.z1 - 2, CARRE.x2 + 2, CARRE.z2 + 5], [LAVAGE.x - 4.5, LAVAGE.z - 5, LAVAGE.x + 4.5, LAVAGE.z + 5], [SELLAGE.x - 3.5, SELLAGE.z - 1.5, SELLAGE.x + 3.5, SELLAGE.z + 3.5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
+  [VISITEURS.x1 - 2, VISITEURS.z1 - 2, VISITEURS.x2 + 2, VISITEURS.z2 + 2], [GRANGE.x1 - 2, GRANGE.z1 - 3, GRANGE.x2 + 2, GRANGE.z2 + 3], [CANTINE.x - 6.5, CANTINE.z - 5, CANTINE.x + 6.5, CANTINE.z + 5], [EQUITALION.x1 - 3, EQUITALION.z1 - 3, EQUITALION.x2 + 3, EQUITALION.z2 + 8], [-162, -186, -86, -118], [CARRE.x1 - 2, CARRE.z1 - 2, CARRE.x2 + 2, CARRE.z2 + 5], [LAVAGE.x - 4.5, LAVAGE.z - 5, LAVAGE.x + 4.5, LAVAGE.z + 5], [SELLAGE.x - 3.5, SELLAGE.z - 1.5, SELLAGE.x + 3.5, SELLAGE.z + 3.5], [DORT.x1 - 1, DORT.z1 - 3, DORT.x2 + 1, DORT.z2 + 1], [VENTE.x - 11, VENTE.z - 10, VENTE.x + 11, VENTE.z + 7], [ELEVAGE.x1 - 1, ELEVAGE.z1 - 1, ELEVAGE.x2 + 1, ELEVAGE.z2 + 1], [32, 19, 56, 29], [PRE_ENFANTS.x1 - 1, PRE_ENFANTS.z1 - 1, PRE_ENFANTS.x2 + 1, PRE_ENFANTS.z2 + 3], [COMPTOIR.x - 2.5, COMPTOIR.z - 2.5, COMPTOIR.x + 2.5, COMPTOIR.z + 2],
 ];
 const chevauche = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 function zoneLibre(x1, z1, x2, z2, saufPre = null) {
@@ -4145,16 +4199,17 @@ function panneauObstaclesVente() {
   const ra = $('#ring-ajout'); if (ra) ra.onclick = () => { rv.obstacles.push({ type: rv.obstacles.length ? 'vertical' : 'croisillon', h: 0.6 }); refaire(); };
   const rb = $('#ring-vente'); if (rb) rb.onclick = () => panneauVente();
 }
-function lancerEnchere(c, mise) {
+function lancerEnchere(c, mise, o = {}) { // o.foire : à la Grande Foire, o.k : effet de la démonstration sur les prix
   if (!c || etat.chevaux.length < 2) return;
-  const base = prixVente(c), depart = Math.round(base * { basse: 0.5, normale: 0.7, haute: 0.95 }[mise] / 5) * 5;
+  const base = prixVente(c), ach = o.foire ? acheteursFoire : acheteurs, crieur = o.foire ? crieurFoire : gaspard, depart = Math.round(base * { basse: 0.5, normale: 0.7, haute: 0.95 }[mise] / 5) * 5;
   const pas = Math.max(5, Math.round(base * 0.05 / 5) * 5);
   if (mene?.cheval === c) mene = null;
   c.avantVente = { lieu: c.lieu, pre: c.pre, pos: c.pos }; c.lieu = 'vente'; majResidents();
   const m = modeleCheval(c, false); scene.add(m.g);
-  enchere = { c, m, ang: Math.PI, prix: depart, pas, leader: null, tic: 3, phase: 'ouverture', compte: 0, offres: 0,
-    maxi: new Map(acheteurs.map(a => [a, Math.round(base * rand(0.75, 1.6) / 5) * 5])) };
-  fermer(); parler(gaspard, `${c.nom}, mise à prix ${depart} pièces !`);
+  enchere = { c, m, ang: Math.PI, prix: depart, pas, leader: null, tic: 3, phase: 'ouverture', compte: 0, offres: 0, foire: !!o.foire, ach, crieur,
+    R: o.foire ? R_FOIRE : { x: VENTE.x, z: VENTE.z, rx: 6.6, rz: 3.4 },
+    maxi: new Map(ach.map(a => [a, Math.round(base * rand(o.foire ? 0.85 : 0.75, o.foire ? 1.5 : 1.6) * (o.k || 1) / 5) * 5])) };
+  fermer(); parler(crieur, `${c.nom}, mise à prix ${depart} pièces !`);
   toast(`Vente aux enchères de ${c.nom} : mise à prix ${depart} pièces`, 'or'); sauver();
 }
 function parler(qui, texte) { // bulle au-dessus d'un personnage, quelques secondes
@@ -4163,7 +4218,7 @@ function parler(qui, texte) { // bulle au-dessus d'un personnage, quelques secon
   const b = etiquette(texte, '#2f1f13', '#fbf1dc', 0.55); b.position.y = 2.6; g.add(b); qui.bulle = b; qui.tBulle = 2.8;
 }
 function majVente(dt) {
-  for (const a of acheteurs) {
+  for (const a of [...acheteurs, ...acheteursFoire]) {
     const pres = Math.hypot(camera.position.x - a.pl.x, camera.position.z - a.pl.z) < 70; a.p.g.visible = pres;
     if (a.tBulle > 0 && (a.tBulle -= dt) <= 0 && a.bulle) { a.p.g.remove(a.bulle); a.bulle = null; }
     if (a.leve > 0) { a.leve -= dt; if (a.leve <= 0) asseoirAcheteur(a, true); }
@@ -4173,47 +4228,53 @@ function majVente(dt) {
       if (a.leve > 0) { const br = a.p.os.mixamorigRightArm, av = a.p.os.mixamorigRightForeArm; if (br) br.rotation.set(BRAS_LEVE.x, BRAS_LEVE.y, BRAS_LEVE.z); if (av) av.rotation.set(0, 0, BRAS_LEVE.av); } // main levée
     } else { marcher(a.p, 0, dt); if (a.p.bras?.[0]) a.p.bras[0].rotation.x = a.leve > 0 ? -2.9 : 0; }
   }
-  if (gaspard) { if (gaspard.tBulle > 0 && (gaspard.tBulle -= dt) <= 0 && gaspard.bulle) { gaspard.g.remove(gaspard.bulle); gaspard.bulle = null; } marcher(gaspard, 0, dt); }
+  for (const q of [gaspard, crieurFoire]) if (q) { if (q.tBulle > 0 && (q.tBulle -= dt) <= 0 && q.bulle) { q.g.remove(q.bulle); q.bulle = null; } marcher(q, 0, dt); }
   const E = enchere; if (!E) return;
-  // le cheval fait le tour de la piste : au pas, ou au trot s'il y a des obstacles, qu'il saute en liberté
-  const sauteur = obstRing.length && ageCheval(E.c) >= AGE_SAUT, v = sauteur ? 4 : 1.4;
-  E.ang += dt * v / 5.2; const x = VENTE.x + Math.cos(E.ang) * 6.6, z = VENTE.z + Math.sin(E.ang) * 3.4;
-  const rot = Math.atan2(-Math.sin(E.ang) * 6.6, Math.cos(E.ang) * 3.4);
+  // le cheval fait le tour de la piste : au pas, ou au trot s'il y a des obstacles, qu'il saute en liberté ; à la Grande
+  // Foire, le cheval d'un autre ranch trotte pendant sa démonstration (et fait de grands sauts si c'est un sauteur)
+  const R = E.R, sauteur = !E.foire && obstRing.length && ageCheval(E.c) >= AGE_SAUT, v = sauteur || E.phase === 'demo' ? 4 : 1.4;
+  E.ang += dt * v / ((R.rx + R.rz) / 2); const x = R.x + Math.cos(E.ang) * R.rx, z = R.z + Math.sin(E.ang) * R.rz;
+  const rot = Math.atan2(-Math.sin(E.ang) * R.rx, Math.cos(E.ang) * R.rz);
   const proche = o => { const d = ((o.angle - E.ang) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI; return d; }; // écart d'angle, signé
   E.tSaut = (E.tSaut || 0) - dt;
+  if (E.phase === 'demo' && E.discDemo === 'saut' && !E.vol && E.tSaut <= 0) { E.vol = { o: null, t: 0, duree: 0.8, haut: 1.1 }; E.tSaut = 2.6; }
   if (sauteur && !E.vol && E.tSaut <= 0) for (const o of obstRing) { const d = proche(o); if (d > 0 && d < 0.22) { E.vol = { o, t: 0, duree: 0.75, haut: o.hEff + 0.4 }; E.tSaut = 1.5; break; } }
   let y = 0, vy = 0;
   if (E.vol) {
     const V = E.vol; V.t += dt; const k = clamp(V.t / V.duree, 0, 1); y = 4 * V.haut * k * (1 - k); vy = 4 * V.haut * (1 - 2 * k) / V.duree;
-    if (!V.compte && k >= 0.5) { V.compte = true; sautVente(E, V.o); }
+    if (!V.compte && k >= 0.5) { V.compte = true; if (V.o) sautVente(E, V.o); else { parler(pick(E.ach), pick(['Quel saut !', 'Superbe !', 'Il vole !'])); applaudir(0.5); } }
     if (k >= 1) E.vol = null;
   }
   E.m.g.position.set(x, y, z); E.m.g.rotation.y = rot; animer(E.m, v, vy, !!E.vol, dt);
   majChoixEnchere();
+  if (E.phase === 'demo') { if ((E.tic -= dt) <= 0) { E.phase = 'ouverture'; E.tic = 2; parler(E.crieur, `${E.c.nom} : mise à prix ${E.prix} pièces !`); } return; }
   if (E.phase === 'decision' || (E.tic -= dt) > 0) return;
-  const candidats = acheteurs.filter(a => a !== E.leader && E.maxi.get(a) >= (E.leader ? E.prix + E.pas : E.prix));
+  const candidats = E.ach.filter(a => a !== E.leader && a.nom !== E.vendeur && E.maxi.get(a) >= (E.leader ? E.prix + E.pas : E.prix));
   if (E.phase === 'ouverture' || E.phase === 'enchere' || (E.phase === 'compte' && candidats.length && Math.random() < 0.35)) {
     if (candidats.length) {
       const a = pick(candidats); if (E.leader) E.prix += E.pas;
       E.leader = a; E.offres++; E.phase = 'enchere'; E.compte = 0; E.tic = rand(1.3, 2.6);
       a.leve = 1.8; asseoirAcheteur(a, false); parler(a, `${E.prix} pièces !`); son(660, 0.08, 'triangle', 0.05);
+      if (E.achat && E.offres > 1 && E.precedent === JOUEUR_FOIRE) toast(`${a.nom} surenchérit : ${E.prix} pièces !`, 'rouge');
+      E.precedent = a;
       return;
     }
     E.phase = 'compte'; E.compte = 0;
   }
   if (E.phase === 'compte') {
-    if (!E.leader) { finirEnchere(false); return; }
-    E.compte++; E.tic = 1.5;
-    if (E.compte === 1) parler(gaspard, `${E.prix} pièces… une fois !`);
-    else if (E.compte === 2) parler(gaspard, `${E.prix} pièces… deux fois !`);
-    else { E.phase = 'decision'; E.tic = 1e9; parler(gaspard, `Dernière offre : ${E.prix} pièces. On vend ?`); }
+    if (!E.leader) { if (E.achat) finirLot(); else finirEnchere(false); return; }
+    E.compte++; E.tic = E.achat ? 2 : 1.5;
+    if (E.compte === 1) parler(E.crieur, `${E.prix} pièces… une fois !`);
+    else if (E.compte === 2) parler(E.crieur, `${E.prix} pièces… deux fois !`);
+    else if (E.achat) finirLot();
+    else { E.phase = 'decision'; E.tic = 1e9; parler(E.crieur, `Dernière offre : ${E.prix} pièces. On vend ?`); }
   }
 }
 function sautVente(E, o) { // le cheval franchit un obstacle de la piste : les acheteurs réagissent
   const c = E.c, hMax = 0.7 + 0.16 * c.stats.saut.niv, reussi = o.hEff <= hMax - 0.05 || Math.random() < 0.35;
   const k = reussi ? 1 + 0.04 + 0.08 * o.hEff : 0.96;
   for (const [a, m] of E.maxi) E.maxi.set(a, Math.round(m * k / 5) * 5);
-  const temoin = pick(acheteurs);
+  const temoin = pick(E.ach);
   if (reussi) { parler(temoin, pick(['Joli saut !', 'Il saute bien !', 'Quelle détente !', 'Superbe !'])); son(620, 0.15, 'triangle', 0.05, 1.5); E.sauts = (E.sauts || 0) + 1; }
   else { o.tombe = 5; parler(temoin, 'Oh, la barre…'); son(160, 0.25, 'sawtooth', 0.04); }
   if (E.phase === 'decision') { E.phase = 'enchere'; E.tic = rand(0.6, 1.2); } // un beau saut peut relancer les enchères
@@ -4222,6 +4283,17 @@ function majChoixEnchere() { // boutons Oui / Non dès qu'il y a une offre ; c'e
   const E = enchere, b = $('#enchere-choix');
   b.hidden = !E;
   if (b.hidden) return;
+  $('#ec-obst').hidden = E.foire; $('#ec-non').hidden = !!E.achat;
+  if (E.achat) { // Grande Foire, acheter : c'est toi qui enchéris contre les autres ranchs
+    const suiv = E.leader ? E.prix + E.pas : E.prix, moi = E.leader === JOUEUR_FOIRE;
+    $('#ec-oui').textContent = moi ? 'Ton offre est la meilleure' : `Enchérir : ${suiv} pièces`;
+    $('#ec-oui').disabled = moi || E.phase === 'demo' || etat.pieces < suiv;
+    $('#ec-titre').textContent = `${E.c.nom} · ${E.vendeur}`; $('#ec-prix').textContent = `${E.prix} pièces`;
+    $('#ec-texte').textContent = E.phase === 'demo' ? `Démonstration de ${E.discDemo} : ${E.c.race}, ${ageTexte(E.c)}, valeur ${prixVente(E.c)} pièces. Les enchères commencent juste après.`
+      : etat.pieces < suiv && !moi ? `Tu n’as que ${etat.pieces} pièces : pas assez pour enchérir.` : moi ? `Tu offres ${E.prix} pièces. Si personne ne surenchérit, il est à toi !` : E.leader ? `${E.leader.nom} offre ${E.prix} pièces. Tu surenchéris ?` : 'Fais la première offre !';
+    return;
+  }
+  $('#ec-oui').textContent = 'Oui, je vends';
   $('#ec-oui').disabled = !E.leader;
   $('#ec-titre').textContent = E.leader ? `${E.c.nom} · offre de ${E.leader.nom}` : `${E.c.nom} · mise à prix`;
   $('#ec-prix').textContent = `${E.prix} pièces`;
@@ -4233,15 +4305,161 @@ function finirEnchere(vendu, refus = false) {
   const c = E.c;
   if (!vendu) {
     Object.assign(c, { lieu: E.c.avantVente.lieu, pre: E.c.avantVente.pre, pos: E.c.avantVente.pos }); delete c.avantVente;
-    if (refus) { parler(gaspard, `${c.nom} est retiré de la vente !`); toast(`Tu gardes ${c.nom} : la meilleure offre était ${E.prix} pièces`); }
-    else { parler(gaspard, 'Pas d’acheteur à ce prix…'); toast(`Personne n’a voulu de ${c.nom} à ${E.prix} pièces : il rentre au ranch. Essaie une mise à prix plus basse.`, 'rouge'); }
-    majResidents(); sauver(); return;
+    if (refus) { parler(E.crieur, `${c.nom} est retiré de la vente !`); toast(`Tu gardes ${c.nom} : la meilleure offre était ${E.prix} pièces`); }
+    else { parler(E.crieur, 'Pas d’acheteur à ce prix…'); toast(`Personne n’a voulu de ${c.nom} à ${E.prix} pièces${E.foire ? '' : ' : il rentre au ranch. Essaie une mise à prix plus basse.'}`, 'rouge'); }
+    majResidents(); sauver();
+    if (E.foire) { monter(c.id); setTimeout(() => finFoire(false, c), 1200); }
+    return;
   }
-  parler(gaspard, `Adjugé à ${E.leader.nom} pour ${E.prix} pièces !`);
+  parler(E.crieur, `Adjugé à ${E.leader.nom} pour ${E.prix} pièces !`);
   etat.chevaux.splice(etat.chevaux.indexOf(c), 1); etat.pieces += E.prix; etat.compteurs.encheres = (etat.compteurs.encheres || 0) + 1;
   if (etat.actif === c.id) etat.actif = etat.chevaux[0].id;
   majResidents(); sonPiece(); sauver();
   toast(`Adjugé ! ${c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces (${E.offres} enchère${E.offres > 1 ? 's' : ''}${E.sauts ? `, ${E.sauts} beau${E.sauts > 1 ? 'x' : ''} saut${E.sauts > 1 ? 's' : ''}` : ''}, valeur estimée ${prixVente(c)})`, 'or');
+  if (E.foire) { etat.compteurs.foire = (etat.compteurs.foire || 0) + 1; applaudir(1.2); setTimeout(() => finFoire(true, c, E), 1500); }
+}
+// ---- Grande Foire des Ranchs (2026-11-02). Une invitation arrive de temps en temps (bouton Concours, touche J) : on y
+// répond « je participe » (on montre son cheval : démonstration de dressage au carré ou de saut sur la piste, au choix
+// sur le panneau ; la note fait monter ou baisser ce que les ranchs sont prêts à payer, puis vente aux enchères) ou
+// « je viens acheter » (trois ranchs présentent chacun un cheval en démonstration, puis on enchérit contre les autres).
+const JOUEUR_FOIRE = { nom: 'toi' };
+let foireEnCours = null, hFoire = 0.9, obstFoire = [];
+function construireObstFoire() {
+  for (const o of obstFoire) { o.g.removeFromParent(); const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); }
+  const S = FOIRE.S, cx = (S.x1 + S.x2) / 2, types = ['croisillon', 'vertical', 'oxer', 'vertical', 'oxer'];
+  obstFoire = [[S.x1 + 8, S.z1 + 6], [cx + 1, S.z1 + 6], [S.x2 - 6, S.z1 + 6], [S.x2 - 8, S.z2 - 6], [cx - 3, S.z2 - 6]].map(([x, z], i) =>
+    obstacle({ x, z, a: Math.PI / 2, h: i === 0 ? Math.max(0.5, hFoire - 0.2) : hFoire, type: hFoire < 0.7 && i === 2 ? 'vertical' : types[i], num: i + 1, terrain: 'foire', larg: 3.2 }));
+}
+const meilleurCheval = () => etat.chevaux.filter(c => debourre(c) && ageCheval(c) >= AGE_ADULTE).sort((a, b) => prixVente(b) - prixVente(a))[0];
+function blocFoire() {
+  const F = etat.foire;
+  if (!F || F.jour < etat.jour || F.fini) return `<h3 class="section">Grande Foire des Ranchs</h3><p class="note">Pas d’invitation à la Grande Foire pour l’instant : il en arrive une de temps en temps.</p>`;
+  const auj = F.jour === etat.jour, best = meilleurCheval();
+  const choix = F.role === 'vendre' ? 'Tu participes : tu montres ton plus beau cheval et tu le vends aux enchères.' : F.role === 'acheter' ? 'Tu viens acheter : trois ranchs présentent un cheval, tu enchéris si tu veux.' : '';
+  return `<h3 class="section">Grande Foire des Ranchs</h3><article class="fiche"><div class="fiche-tete"><span class="robe" style="background:#962828"></span><div><h3>Invitation à la Grande Foire · ${auj ? '<b style="color:var(--or)">aujourd’hui !</b>' : `jour ${F.jour}`}</h3>
+    <small>Tous les ranchs se réunissent pour une grande vente aux enchères : chacun montre son plus beau et plus fort cheval, en démonstration de dressage ou de saut.</small></div></div>
+    ${F.role ? `<p style="color:var(--vert);margin:4px 0">${choix}</p>${F.role === 'vendre' ? `<p class="note">Viens à cheval, sur celui que tu veux vendre${best ? ` (ton plus beau : <b>${best.nom}</b>, valeur ${prixVente(best)} pièces)` : ''}. Il te faut au moins deux chevaux.</p>` : `<p class="note">Tu as ${etat.pieces} pièces pour acheter.</p>`}
+      <div class="boutons">${auj ? `<button class="btn or gros" id="foire-partir" ${etat.heure >= 8 && etat.heure < 18 ? '' : 'disabled'}>Partir à la Grande Foire en van</button>` : `<span class="note">Le jour ${F.jour}, de 8 h à 18 h, reviens ici pour partir.</span>`}<button class="btn" id="foire-changer">Changer d’avis</button></div>`
+    : `<div class="boutons"><button class="btn or" data-foire-role="vendre">Je participe : je montre et je vends mon cheval</button><button class="btn or" data-foire-role="acheter">Je viens acheter</button><button class="btn" data-foire-role="non">Non merci</button></div>`}</article>`;
+}
+function brancherFoire(C) {
+  C.querySelectorAll('[data-foire-role]').forEach(b => b.onclick = () => { if (b.dataset.foireRole === 'non') etat.foire = null; else etat.foire.role = b.dataset.foireRole; sauver(); panneauInvitations(); });
+  const ch = $('#foire-changer'); if (ch) ch.onclick = () => { etat.foire.role = null; sauver(); panneauInvitations(); };
+  const pa = $('#foire-partir'); if (pa) pa.onclick = () => partirALaFoire();
+}
+function nouvelleFoire(dans) { etat.foire = { jour: etat.jour + dans, role: null }; return etat.foire; }
+function partirALaFoire() {
+  const F = etat.foire; if (!F || F.jour !== etat.jour) return;
+  if (concours || concoursDr || lecon || balade || parcours.actif || enchere) { toast('Termine d’abord ce que tu fais', 'rouge'); return; }
+  if (F.role === 'vendre' && etat.aPied) { toast('Monte le cheval que tu veux présenter (M), puis pars', 'rouge'); return; }
+  if (F.role === 'vendre' && etat.chevaux.length < 2) { toast('Il te faut au moins deux chevaux pour en vendre un', 'rouge'); return; }
+  fermer(); F.fini = true; sauver();
+  J.x = FOIRE.arrivee.x; J.z = FOIRE.arrivee.z; J.rot = -Math.PI / 2; J.vit = 0; camPrete = false;
+  foireEnCours = { role: F.role, lots: [], i: 0, achats: [] };
+  if (F.role === 'vendre') { toast('Bienvenue à la Grande Foire ! Choisis ta démonstration au panneau', 'or'); setTimeout(() => panneauFoire(), 900); return; }
+  const ranchs = [...RANCHS_FOIRE].sort(() => Math.random() - 0.5).slice(0, 3);
+  foireEnCours.lots = ranchs.map(r => { const disc = Math.random() < 0.5 ? 'dressage' : 'saut'; return { ranch: r, disc, c: chevalDeFoire(disc) }; });
+  toast(`Bienvenue à la Grande Foire ! ${ranchs.join(', ')} présentent un cheval chacun`, 'or');
+  setTimeout(() => lancerLot(), 3000);
+}
+function chevalDeFoire(discipline) { // un beau cheval d'un autre ranch, débourré, de 4 à 9 ans
+  const races = Object.entries(RACES).filter(([, R]) => R.prix && (discipline === 'dressage' ? R.specialite === 'dressage' : R.specialite === 'saut' || R.base?.saut >= 4));
+  const [race, R] = pick(races.length ? races : Object.entries(RACES).filter(([, R]) => R.prix));
+  const base = Object.fromEntries(STATS.map(([k]) => [k, Math.min(10, (R.base?.[k] || 2) + Math.floor(Math.random() * 3))]));
+  const c = nouveauCheval(nomLibre(), race, R.robe, base, R.taille || 1); c.crin = R.crin ?? null; c.age0 = 4 + Math.floor(Math.random() * 6); c.jourAge0 = etat.jour; return c;
+}
+function lancerLot() {
+  const F = foireEnCours; if (!F || enchere) return;
+  const L = F.lots[F.i], c = L.c, base = prixVente(c), m = modeleCheval(c, false); scene.add(m.g);
+  enchere = { c, m, ang: Math.PI, prix: Math.round(base * 0.6 / 5) * 5, pas: Math.max(5, Math.round(base * 0.05 / 5) * 5), leader: null, tic: 12, phase: 'demo', compte: 0, offres: 0,
+    achat: true, foire: true, vendeur: L.ranch, discDemo: L.disc, R: R_FOIRE, ach: acheteursFoire, crieur: crieurFoire,
+    maxi: new Map(acheteursFoire.map(a => [a, Math.round(base * rand(0.7, 1.3) / 5) * 5])) };
+  parler(crieurFoire, `${L.ranch} présente ${c.nom} : démonstration de ${L.disc} !`);
+  toast(`Cheval ${F.i + 1} sur ${F.lots.length} : ${L.ranch} présente ${c.nom}, ${c.race}`, 'or');
+}
+function encherirJoueur() {
+  const E = enchere; if (!E?.achat || E.phase === 'demo' || E.leader === JOUEUR_FOIRE) return;
+  const prix = E.leader ? E.prix + E.pas : E.prix; if (etat.pieces < prix) { toast('Pas assez de pièces', 'rouge'); return; }
+  E.prix = prix; E.leader = JOUEUR_FOIRE; E.precedent = JOUEUR_FOIRE; E.offres++; E.phase = 'enchere'; E.compte = 0; E.tic = rand(1.6, 2.6);
+  parler(E.crieur, `${prix} pièces pour toi !`); son(700, 0.08, 'triangle', 0.05);
+}
+function finirLot() {
+  const E = enchere, F = foireEnCours; enchere = null; scene.remove(E.m.g); $('#enchere-choix').hidden = true;
+  if (E.leader === JOUEUR_FOIRE && etat.pieces >= E.prix) {
+    etat.pieces -= E.prix; etat.chevaux.push(E.c); majResidents(); sonPiece(); applaudir(1);
+    parler(E.crieur, `Adjugé, pour toi, ${E.prix} pièces !`); toast(`Bravo ! ${E.c.nom} est à toi pour ${E.prix} pièces : il t’attend au paddock du ranch`, 'or'); F?.achats.push(E.c.nom);
+  } else if (E.leader && E.leader !== JOUEUR_FOIRE) { parler(E.crieur, `Adjugé à ${E.leader.nom} pour ${E.prix} pièces !`); toast(`${E.c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces`); }
+  else parler(E.crieur, `Pas d’acheteur : ${E.c.nom} est retiré`);
+  sauver();
+  if (!F) return;
+  F.i++; if (F.i < F.lots.length) setTimeout(() => lancerLot(), 4500); else setTimeout(() => finFoire(), 3000);
+}
+function panneauFoire() {
+  if (ouvert()) fermer();
+  const F = foireEnCours, retour = '<button class="btn" id="foire-retour">Rentrer au ranch en van</button>';
+  const brancher = () => { const r = $('#foire-retour'); if (r) r.onclick = () => rentrerDeFoire(); };
+  if (!F) { ouvrir(`<div class="pnj">Grande Foire des Ranchs</div><h2>La Grande Foire</h2><p>Tous les ranchs se réunissent ici pour de grandes ventes aux enchères. On y vient sur invitation : regarde dans le bouton Concours (J).</p><div class="boutons">${retour}</div>`); brancher(); return; }
+  if (F.role === 'acheter') {
+    ouvrir(`<div class="pnj">Grande Foire · tu viens acheter</div><h2>Les chevaux présentés</h2>
+      ${F.lots.map((L, i) => `<p>${i < F.i ? '✓' : i === F.i ? '→' : '·'} <b>${L.c.nom}</b> (${L.c.race}, ${ageTexte(L.c)}) · ${L.ranch} · démonstration de ${L.disc}</p>`).join('')}
+      <p class="note">Pendant chaque vente, enchéris avec le bouton vert en bas de l’écran. Tu as ${etat.pieces} pièces.</p><div class="boutons">${retour}</div>`);
+    brancher(); return;
+  }
+  if (F.presente) { ouvrir(`<div class="pnj">Grande Foire</div><h2>Ta démonstration est faite</h2><div class="boutons">${retour}</div>`); brancher(); return; }
+  const c = etat.aPied ? null : chevalActif(), best = meilleurCheval();
+  ouvrir(`<div class="pnj">Grande Foire · Maître Armand</div><h2>Montre ton plus beau cheval</h2>
+    ${c ? `<p>Tu présentes <b>${c.nom}</b> (${c.race}, ${ageTexte(c)}) · valeur estimée <b>${prixVente(c)} pièces</b>.${best && best.id !== c.id ? ` <span class="note">Ton plus beau cheval est ${best.nom}.</span>` : ''}</p>${blocStats(c.stats, false)}` : '<p style="color:var(--rouge)">Monte d’abord ton cheval (M).</p>'}
+    <p>Choisis ta démonstration. Plus elle est belle, plus les ranchs paieront cher ; ensuite vient la vente aux enchères, et c’est toi qui décides de vendre ou non.</p>
+    <div class="boutons"><button class="btn or gros" id="foire-dressage">Démonstration de dressage</button><button class="btn or gros" id="foire-saut">Démonstration de saut</button></div>
+    <div class="hauteur"><span>Hauteur des obstacles :</span><button class="btn" id="foire-hmoins" ${hFoire <= 0.51 ? 'disabled' : ''}>−</button><span>${fr(hFoire, 1)} m</span><button class="btn" id="foire-hplus" ${hFoire >= 1.39 ? 'disabled' : ''}>+</button></div>
+    <div class="boutons" style="margin-top:8px">${retour}</div>`);
+  brancher();
+  $('#foire-hmoins').onclick = () => { hFoire = Math.round(hFoire * 10 - 1) / 10; construireObstFoire(); panneauFoire(); };
+  $('#foire-hplus').onclick = () => { hFoire = Math.round(hFoire * 10 + 1) / 10; construireObstFoire(); panneauFoire(); };
+  $('#foire-dressage').onclick = () => {
+    if (!c) { toast('Monte à cheval (M)', 'rouge'); return; }
+    J.x = (FOIRE.C.x1 + FOIRE.C.x2) / 2; J.z = FOIRE.C.z2 + 3; J.rot = Math.PI; J.vit = 0; camPrete = false;
+    commencerDressageCarre(REPRISE, true, { jeu: FOIRE.jeu, foire: true });
+  };
+  $('#foire-saut').onclick = () => {
+    if (!c) { toast('Monte à cheval (M)', 'rouge'); return; }
+    if (ageCheval(c) < AGE_SAUT) { toast(`${c.nom} est trop jeune pour sauter (${AGE_SAUT} ans)`, 'rouge'); return; }
+    fermer(); const d = departLieu(FOIRE.S); J.x = d.x + 1; J.z = d.z; J.rot = Math.PI / 2; J.vit = 0; camPrete = false;
+    parcours.foire = true; basculerParcours('foire');
+  };
+}
+function foireApresDemo(discipline, note, fautes = 0) { // fin de ta démonstration : les ranchs réagissent, puis la mise à prix
+  const F = foireEnCours; if (!F) return;
+  const k = discipline === 'dressage' ? 0.8 + 0.06 * note : fautes === 0 ? 1.1 + 0.3 * hFoire : Math.max(0.8, 1.05 - 0.07 * fautes);
+  F.presente = true; F.k = k; applaudir(k > 1 ? 1.4 : 0.6);
+  for (const a of acheteursFoire) if (Math.random() < 0.5) parler(a, k > 1.15 ? pick(['Magnifique !', 'Je le veux !', 'Quel cheval !']) : k > 0.95 ? pick(['Pas mal…', 'Joli.']) : 'Bof…');
+  const c = chevalActif(), base = prixVente(c);
+  ouvrir(`<div class="pnj">Grande Foire · Maître Armand</div><h2>${discipline === 'dressage' ? `Reprise de dressage : ${fr(note, 1)}/10` : fautes ? `Démonstration de saut : ${fautes} faute${fautes > 1 ? 's' : ''}` : 'Démonstration de saut : sans faute !'}</h2>
+    <p>${k > 1.15 ? 'Les ranchs sont impressionnés : ils paieront bien plus cher !' : k > 0.95 ? 'Les ranchs ont aimé ta démonstration.' : 'Les ranchs sont un peu déçus : les prix seront plus bas.'}</p>
+    <p>Maintenant, la vente : ${c.nom} va faire le tour du carré devant les ranchs. Choisis la mise à prix (valeur estimée ${base} pièces). Tu pourras toujours refuser la dernière offre.</p>
+    <div class="boutons">${[['basse', 'Mise à prix basse'], ['normale', 'Normale'], ['haute', 'Haute']].map(([m, l]) => `<button class="btn ${m === 'normale' ? 'or' : ''}" data-foire-mise="${m}">${l} · ${Math.round(base * { basse: 0.5, normale: 0.7, haute: 0.95 }[m] / 5) * 5} p.</button>`).join('')}</div>
+    <div class="boutons"><button class="btn" id="foire-garder">Je ne le vends pas finalement</button></div>`);
+  $('#contenu').querySelectorAll('[data-foire-mise]').forEach(b => b.onclick = () => {
+    descendre(); if (!etat.aPied) return;
+    J.x = FOIRE.panneau.x - 3; J.z = FOIRE.panneau.z - 1.5; J.rot = Math.PI; camPrete = false; // tu regardes la vente depuis l'entrée du carré
+    lancerEnchere(c, b.dataset.foireMise, { foire: true, k });
+  });
+  $('#foire-garder').onclick = () => finFoire(false, c);
+}
+function finFoire(vendu = null, c = null, E = null) {
+  const F = foireEnCours; foireEnCours = null; if (!F) return;
+  const texte = F.role === 'acheter' ? (F.achats.length ? `Tu as acheté ${F.achats.join(' et ')} : ${F.achats.length > 1 ? 'ils t’attendent' : 'il t’attend'} au paddock du ranch.` : 'Tu n’as rien acheté cette fois-ci.')
+    : vendu ? `${c.nom} est vendu à ${E.leader.nom} pour ${E.prix} pièces.` : `Tu gardes ${c?.nom || 'ton cheval'}.`;
+  ouvrir(`<div class="pnj">Grande Foire des Ranchs</div><h2>La foire est finie !</h2><p>${texte}</p>
+    <div class="boutons"><button class="btn or gros" id="foire-retour">Rentrer au ranch en van</button><button class="btn" id="foire-rester">Rester encore un peu</button></div>`);
+  $('#foire-retour').onclick = () => rentrerDeFoire(); $('#foire-rester').onclick = () => fermer();
+}
+function rentrerDeFoire() {
+  if (enchere) { toast('Attends la fin de la vente', 'rouge'); return; }
+  if (dressageCarre) finirDressageCarre(true);
+  if (parcours.actif) { parcours.actif = false; parcours.foire = false; }
+  foireEnCours = null; fermer();
+  J.x = 46; J.z = 6; J.rot = Math.PI / 2; J.vit = 0; camPrete = false; toast('Le van te ramène au ranch');
 }
 // ---- Ta maison : dormir, et l'état du ranch en un coup d'œil
 function panneauMaison() {
@@ -5952,7 +6170,7 @@ function finirBalade(reussie) {
 // le cavalier sait sauter (hMax de son niveau), Saut du cheval, humeur.
 let concours = null, vueConcours = false;
 const PRIX_CONCOURS = [150, 90, 60, 30, 20];
-const TERRAINS = { carriere: { depart: DEPART, zone: CARRIERE }, regional: { depart: DEPART_R, zone: REGIONAL }, ...Object.fromEntries(Object.entries(LIEUX_CONCOURS).map(([k, L]) => [k, { depart: departLieu(L), zone: L }])), equitalion: { depart: departLieu(EQUITALION), zone: EQUITALION } };
+const TERRAINS = { carriere: { depart: DEPART, zone: CARRIERE }, regional: { depart: DEPART_R, zone: REGIONAL }, ...Object.fromEntries(Object.entries(LIEUX_CONCOURS).map(([k, L]) => [k, { depart: departLieu(L), zone: L }])), equitalion: { depart: departLieu(EQUITALION), zone: EQUITALION }, foire: { depart: departLieu(FOIRE.S), zone: FOIRE.S } };
 const nbObstTerrain = t => t === 'carriere' ? nbObstCarriere() : obstacles.filter(o => o.num && o.terrain === t).length || 6;
 const RANCHS = ['Ranch du Moulin', 'Écurie des Pins', 'Haras de la Source', 'Centre équestre du Lac', 'Écurie du Val', 'Ranch des Genêts'];
 const CAVALIERS = [['Camille', 'f'], ['Julien', 'm'], ['Sarah', 'f'], ['Maxime', 'm'], ['Clara', 'f'], ['Antoine', 'm'], ['Lucie', 'f'], ['Romain', 'm'], ['Eva', 'f'], ['Paul', 'm'], ['Noémie', 'f'], ['Hugo', 'm']];
@@ -6403,7 +6621,7 @@ function lancerDemo() {
   toast('Démonstration : va au drapeau de départ, appuie sur E, puis saute tes obstacles dans l’ordre', 'or');
 }
 function basculerParcours(terrain = 'carriere') {
-  if (parcours.actif) { parcours.actif = false; parcours.demo = false; toast('Parcours abandonné'); if (concours?.attenteJoueur) joueurAFini(0, 0, true); return; }
+  if (parcours.actif) { parcours.actif = false; parcours.demo = false; parcours.foire = false; toast('Parcours abandonné'); if (concours?.attenteJoueur) joueurAFini(0, 0, true); return; }
   if (concours && !concours.attenteJoueur) { toast('Un concours est en cours : attends ton tour', 'rouge'); return; }
   if (concours?.attenteJoueur && concours.terrain !== terrain) { toast('Ton tour se court sur l’autre terrain', 'rouge'); return; }
   if (etat.aPied) { toast('Monte à cheval pour prendre le départ (touche M)', 'rouge'); return; }
@@ -6414,6 +6632,7 @@ function basculerParcours(terrain = 'carriere') {
 }
 function finirParcours() {
   parcours.actif = false;
+  if (parcours.foire) { parcours.foire = false; parcours.affiche = 6; $('#chrono').innerHTML = `Démonstration finie<small>${parcours.fautes ? `${parcours.fautes} faute${parcours.fautes > 1 ? 's' : ''}` : 'sans faute'}</small>`; sonPiece(); setTimeout(() => foireApresDemo('saut', 0, parcours.fautes), 1200); return; }
   if (concours?.attenteJoueur) { // un tour de concours : il va au classement, sans les gains ordinaires
     const total = parcours.t + parcours.fautes * 4; parcours.affiche = 6;
     $('#chrono').innerHTML = `${fr(total)} s<small>${parcours.fautes ? `${parcours.fautes} faute${parcours.fautes > 1 ? 's' : ''}` : 'sans faute'} · au classement du concours</small>`;
@@ -6463,6 +6682,8 @@ const interactions = [
   ...Object.entries(LIEUX_CONCOURS).map(([k, L]) => ({ x: departLieu(L).x, z: departLieu(L).z, r: 4.5, si: () => concours?.terrain === k || (parcours.actif && parcours.terrain === k), texte: () => parcours.actif ? 'Abandonner le parcours' : 'Prendre le départ du concours', action: () => basculerParcours(k) })),
   { x: DEPART_R.x, z: DEPART_R.z, r: 4.5, si: () => concours?.terrain === 'regional' || (parcours.actif && parcours.terrain === 'regional'), texte: () => parcours.actif ? 'Abandonner le parcours' : 'Prendre le départ du concours', action: () => basculerParcours('regional') },
   { x: JUGE.x, z: JUGE.z, r: 4, texte: () => 'Organiser un concours ouvert', action: () => organiserOuvert() },
+  { x: FOIRE.panneau.x, z: FOIRE.panneau.z, r: 4, texte: () => 'Grande Foire des Ranchs', action: () => panneauFoire() },
+  { x: departLieu(FOIRE.S).x, z: departLieu(FOIRE.S).z, r: 4.5, si: () => parcours.actif && parcours.terrain === 'foire', texte: () => 'Abandonner la démonstration', action: () => basculerParcours('foire') },
   { x: JUGE_R.x, z: JUGE_R.z, r: 4.5, texte: () => 'S’inscrire au concours régional', action: () => inscriptionRegional() },
 ];
 function interactionProche() {
@@ -6681,7 +6902,7 @@ $('#b-sellerie').onclick = () => atelier();
 $('#b-amenager').onclick = () => amenager();
 $('#b-pied').onclick = e => { e.currentTarget.blur(); toucheMonter(); };
 $('#t-batir').onclick = () => amenager();
-$('#ec-oui').onclick = () => { if (enchere?.leader) finirEnchere(true); };
+$('#ec-oui').onclick = () => { if (enchere?.achat) encherirJoueur(); else if (enchere?.leader) finirEnchere(true); };
 $('#ec-non').onclick = () => { if (enchere) finirEnchere(false, true); };
 $('#ec-obst').onclick = () => panneauObstaclesVente();
 $('#longe').addEventListener('pointerdown', e => { const b = e.target.closest('[data-longe]'); if (!b) return; e.preventDefault(); if (b.dataset.longe === 'fin') finirLonge(); else ordonnerLonge(b.dataset.longe); });
@@ -6794,6 +7015,7 @@ function franchir(p0x, p0z) {
     if (parcours.actif && o.num === parcours.prochain && (o.terrain || 'carriere') === parcours.terrain) {
       if (!ok) parcours.fautes++;
       if (!o.terrain) reactionPublic(ok && !bas, o.hEff);
+      if (o.terrain === 'foire') { applaudir(ok ? 0.8 : 0.3); toast(ok ? pick(['Les ranchs applaudissent !', 'Bravo !', 'Superbe saut !']) : 'Oooh, la barre…', ok ? 'or' : 'rouge'); }
       parcours.prochain++;
       if (parcours.prochain > nbObstTerrain(parcours.terrain)) finirParcours();
     }
@@ -6926,7 +7148,7 @@ function majCheval(dt) {
   if (parcours.actif) {
     parcours.t += dt;
     const Z = TERRAINS[parcours.terrain || 'carriere'].zone;
-    if (parcours.t > 2 && (J.x < Z.x1 - 4 || J.x > Z.x2 + 4 || J.z < Z.z1 - 4 || J.z > Z.z2 + 4)) { parcours.actif = false; if (concours?.attenteJoueur) joueurAFini(0, 0, true); toast('Tu es sorti de la carrière : parcours annulé', 'rouge'); }
+    if (parcours.t > 2 && (J.x < Z.x1 - 4 || J.x > Z.x2 + 4 || J.z < Z.z1 - 4 || J.z > Z.z2 + 4)) { parcours.actif = false; parcours.foire = false; if (concours?.attenteJoueur) joueurAFini(0, 0, true); toast('Tu es sorti de la carrière : parcours annulé', 'rouge'); }
   }
 }
 
@@ -7183,7 +7405,8 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); construireLieux(); if (!etat.invitationsVues) { etat.invitationsVues = true; nouvelleInvitation(1); } J.endu = enduMax();
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); construireLieux(); if (!etat.invitationsVues) { etat.invitationsVues = true; nouvelleInvitation(1); }
+  if (!etat.foireVue) { etat.foireVue = true; nouvelleFoire(etat.heure < 15 ? 0 : 1); setTimeout(() => toast(`Invitation à la Grande Foire des Ranchs, ${etat.foire.jour === etat.jour ? 'aujourd’hui' : 'demain'} ! Réponds dans le bouton Concours (J)`, 'or'), 9000); } J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
   for (const c of etat.chevaux) c.sexe ||= Math.random() < 0.5 ? 'jument' : 'etalon';
@@ -7197,7 +7420,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { get gerante() { return gerante; }, panneauGerante, EQUITALION, podiumEtPrix, get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { get foireEnCours() { return foireEnCours; }, get enchere() { return enchere; }, panneauFoire, partirALaFoire, foireApresDemo, encherirJoueur, FOIRE,  get gerante() { return gerante; }, panneauGerante, EQUITALION, podiumEtPrix, get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
