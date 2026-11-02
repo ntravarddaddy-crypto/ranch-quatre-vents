@@ -2,9 +2,9 @@
 // Chaque fichier est rangé sous son empreinte (« fichier?v=empreinte ») : une nouvelle version ne retélécharge
 // que les fichiers changés, et toujours depuis le serveur (cache: 'reload'), jamais depuis le cache de Chrome :
 // GitHub Pages fait garder les fichiers 10 minutes, et une mise à jour reprenait l'ancienne page (2026-10-11).
-const VERSION = 'f21602105565';
+const VERSION = '30ba986a3765';
 const EMPREINTES = {
-"./index.html": "2f2a3b78330b",
+"./index.html": "929e4b7ac57d",
 "./manifest.webmanifest": "3b2711e91796",
 "./assets/amy.json": "f415bdd20ad5",
 "./assets/cheval-licence.txt": "680f93fa92ea",
