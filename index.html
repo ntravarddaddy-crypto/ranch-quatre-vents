@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-02 20:27";</script>
+<script>window.VERSION_JEU = "2026-11-02 20:33";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -4475,8 +4475,9 @@ function panneauMaison() {
 }
 
 // ---- Voiture et van du ranch : on conduit (Z Q S D, Maj pour aller plus vite), le van suit au bout de son timon.
-// On y fait monter jusqu'à deux chevaux menés en main (E à l'arrière du van), pour les emmener au concours régional.
+// On y fait monter jusqu'à trois chevaux menés en main (VAN_PLACES ; deux avant le 2026-11-02) (E à l'arrière du van), pour les emmener au concours régional.
 const ATTELAGE = { arriere: 2.62, timon: 4.02 }; // de la voiture à la boule d'attelage ; de la boule à l'essieu du van
+const VAN_PLACES = 3;
 const chevauxDansVan = () => etat.chevaux.filter(c => c.lieu === 'van');
 function construireVehicules() {
   if (VOIT) { scene.remove(VOIT.m.g); scene.remove(VOIT.v.g); }
@@ -4552,10 +4553,10 @@ function sortirVoiture() {
 function arriereVan() { const V = VOIT; return { x: V.ax - Math.sin(V.remRot) * 3.3, z: V.az - Math.cos(V.remRot) * 3.3 }; }
 function chargerVan() {
   const r = mene; if (!r) return;
-  if (chevauxDansVan().length >= 2) { toast('Le van est plein : deux chevaux au plus', 'rouge'); return; }
+  if (chevauxDansVan().length >= VAN_PLACES) { toast(`Le van est plein : ${VAN_PLACES} chevaux au plus`, 'rouge'); return; }
   const c = r.cheval; c.lieu = 'van'; c.fugue = null; mene = null; VOIT.rampe = 3;
   majResidents(); sauver(); son(260, 0.3, 'triangle', 0.05);
-  toast(`${c.nom} monte dans le van`, 'or');
+  toast(`${c.nom} monte dans le van · ${chevauxDansVan().length} sur ${VAN_PLACES}`, 'or');
 }
 function dechargerVan(c) {
   const p = arriereVan(), rot = VOIT.remRot + Math.PI;
@@ -5169,15 +5170,30 @@ function ideeAutonome(e, dt) { // assis au banc, il décide tout seul de ce qu'i
   if (h >= 8 && h < 17.5 && Math.random() < 0.35) {
     const choix = DEMANDES.filter(d => ACTIVITES_SEULES.includes(d.id) && (!d.si || d.si(e)));
     if (!choix.length) return false;
-    const d = { ...pick(choix) }; d.prepare?.(e, d);
-    const [bonus, , info] = d.oui(e, goutsDe(e.nom), d); s.humeur = clamp(s.humeur + bonus, 0, 100);
-    if (info) toast(info); return e.etat !== 'attend';
+    const m = monits.find(x => !x.cours);
+    if (!m) return false; // sans moniteur, il vient te le demander à toi (lancerDemande)
+    const d = { ...pick(choix) }; d.prepare?.(e, d); d.question = d.texte(e, goutsDe(e.nom), d);
+    e.demandeCoach = { d, m }; aller(e, m.x + rand(-0.8, 0.8), m.z - 1.3, 'versCoach'); return true;
   }
   return false;
 }
+function bulle(e, t, duree = 2600) { const b = etiquette(t, '#2f1f13', '#fbf1dc', 0.42); b.position.y = 2.2; e.p.g.add(b); setTimeout(() => e.p.g.remove(b), duree); }
+function demanderAuCoach(e) { // arrivé devant son moniteur : il pose sa question, le moniteur dit oui, il y va
+  const D = e.demandeCoach; if (!D) return;
+  e.p.g.rotation.y = Math.atan2(D.m.x - e.x, D.m.z - e.z);
+  bulle(e, D.d.question, 2400); setTimeout(() => bulle(D.m, pick(['Oui, vas-y !', 'Bien sûr !', 'D’accord, amuse-toi bien !']), 2400), 900);
+  e.attente = 2.6; e.etat = 'reponseCoach';
+}
+function finirDemandeCoach(e) {
+  const D = e.demandeCoach; e.demandeCoach = null; e.etat = 'attend';
+  if (!D || !enfantsDebout()) { soir(e); return; }
+  const [bonus, merci, info] = D.d.oui(e, goutsDe(e.nom), D.d); e.s.humeur = clamp(e.s.humeur + bonus, 0, 100); bulle(e, merci);
+  toast(`${e.nom} a demandé à ${D.m.nom} : « ${D.d.question} » · ${D.m.nom} a dit oui${info ? `. ${info}` : ''}`);
+  if (e.etat === 'attend') aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc');
+}
 function blocAutonomes() {
   return `<h3 class="section">Enfants autonomes</h3>
-    <p class="note">${etat.autonomes ? 'Les enfants font tout seuls : ils se servent à la cantine quand ils ont faim (leur plat préféré, payé par toi), vont monter seuls au manège couvert et décident seuls de leurs activités.' : 'Les enfants attendent que tu t’occupes d’eux : repas, cours et réponses à leurs demandes.'}</p>
+    <p class="note">${etat.autonomes ? 'Les enfants font tout seuls : ils se servent à la cantine quand ils ont faim (leur plat préféré, payé par toi), vont monter seuls au manège couvert et demandent leurs activités à leur moniteur, qui dit toujours oui (sans moniteur, ils viennent te les demander).' : 'Les enfants attendent que tu t’occupes d’eux : repas, cours et réponses à leurs demandes.'}</p>
     <div class="boutons"><button class="btn ${etat.autonomes ? '' : 'or'}" id="autonomes">${etat.autonomes ? 'Ils sont autonomes · ne plus les laisser faire seuls' : 'Rendre les enfants autonomes'}</button></div>`;
 }
 function blocMoniteurs() {
@@ -5751,6 +5767,8 @@ function arriveeEleve(e, jour) {
       break;
     case 'versPause': e.etat = 'pause'; e.p.g.visible = false; break;
     case 'versCoursMoniteur': if (jour) { e.etat = 'coursMoniteur'; e.p.g.visible = false; } else soir(e); break;
+    case 'versCoach': if (jour) demanderAuCoach(e); else { e.demandeCoach = null; soir(e); } break;
+    case 'reponseCoach': finirDemandeCoach(e); break;
     case 'versSeul': if (jour) { e.etat = 'seul'; e.p.g.visible = false; e.tSeul = HEURE_S * 0.75; } else soir(e); break;
   }
 }
@@ -5801,7 +5819,7 @@ function majEleves(dt) {
   }
   for (const h of chevauxStage) majChevalStage(h, dt);
   majPreEnfants(dt);
-  if (jour && etat.heure >= 8 && etat.heure < 17.5 && !lecon && !balade && !concours && !parcours.actif && !longe && !etat.autonomes && !eleves.some(e => e.etat === 'demande') && (prochaineDemande -= dt) <= 0) { prochaineDemande = rand(50, 110); lancerDemande(); }
+  if (jour && etat.heure >= 8 && etat.heure < 17.5 && !lecon && !balade && !concours && !parcours.actif && !longe && !(etat.autonomes && monits.length) && !eleves.some(e => e.etat === 'demande') && (prochaineDemande -= dt) <= 0) { prochaineDemande = rand(50, 110); lancerDemande(); }
   if (jour) for (const s of etat.stagiaires) { // la faim monte ; sous 35, l'humeur baisse
     const e = eleves.find(x => x.s === s); if (e?.etat === 'mange') continue;
     s.faim = Math.max(0, (s.faim ?? 100) - 7 * dt / HEURE_S);
@@ -6066,7 +6084,7 @@ function panneauGite() {
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain', 'versCoursMoniteur', 'coursMoniteur', 'versSeul', 'seul'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain', 'versCoursMoniteur', 'coursMoniteur', 'versSeul', 'seul', 'versCoach', 'reponseCoach'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -6849,7 +6867,7 @@ function interactionProche() {
     if (dv < 3.4 && dv < bd && !mene) { bd = dv; best = { texte: () => 'Conduire la voiture', action: entrerVoiture }; }
     const ar = arriereVan(), da = Math.hypot(J.x - ar.x, J.z - ar.z), dans = chevauxDansVan();
     if (da < 3.2 && da < bd) {
-      if (mene && dans.length < 2) { bd = da; best = { texte: () => `Faire monter ${mene.cheval.nom} dans le van`, action: chargerVan }; }
+      if (mene && dans.length < VAN_PLACES) { bd = da; best = { texte: () => `Faire monter ${mene.cheval.nom} dans le van`, action: chargerVan }; }
       else if (!mene && dans.length) { bd = da; best = { texte: () => `Faire descendre ${dans[0].nom} du van`, action: () => dechargerVan(dans[0]) }; }
     }
   }
@@ -6932,7 +6950,7 @@ function aide() {
       <li><b>Gîte des cavaliers</b>, au sud-est : cinq chambres. Chaque enfant reste <b>${STAGE_JOURS} jours</b> avec son propre cheval, logé dans les <b>box des stagiaires</b> (face à l’écurie). Chaque jour où il monte, il gagne un niveau le lendemain ; s’il ne monte pas, il boude. Les ${JOURS_CONCOURS} derniers jours, il court un <b>concours</b> sur le parcours de la carrière (classement, prix pour le ranch). En partant, il paie son séjour selon son humeur.</li>
       <li><b>Ta maison</b>, au sud du chemin, près du ranch : on y dort jusqu’au matin (après 18 h) et on y voit ses réserves. À côté, le <b>comptoir</b> de Rose achète et vend foin, avoine, carottes et pommes, à des prix qui changent chaque jour. <b>Basile</b> rachète aussi tes chevaux.</li>
       <li><b>Champs</b> : trace-les avec Aménager (B), puis sème-les (E) : foin, avoine ou carottes. Ils poussent en 16 à 30 heures de jeu ; récolte-les quand ils sont dorés. L’avoine rassasie les chevaux et leur donne de l’endurance.</li>
-      <li><b>Voiture et van</b>, garés au parking près de la route : à pied, E près de la voiture pour conduire (Z, Q, D, Maj pour aller vite, E pour sortir). Mène un cheval en main jusqu’à l’arrière du van et appuie sur E pour le faire monter (deux au plus) ; E au même endroit pour le faire descendre.</li>
+      <li><b>Voiture et van</b>, garés au parking près de la route : à pied, E près de la voiture pour conduire (Z, Q, D, Maj pour aller vite, E pour sortir). Mène un cheval en main jusqu’à l’arrière du van et appuie sur E pour le faire monter (trois au plus) ; E au même endroit pour le faire descendre.</li>
       <li><b>La route</b> part du ranch vers l’est : au nord, le <b>concours régional</b> du Domaine des Tilleuls (inscription auprès du juge, trois catégories, cinq cavaliers d’autres ranchs, tu passes en dernier) ; au sud, le <b>marché du village</b> (grains, fruits et légumes, engrais, et Victor qui vend d’autres chevaux chaque jour).</li>
       <li><b>Concours ouvert</b> : à la cabane du juge, au bout de la carrière, invite les ranchs voisins à courir chez toi. Ils paient leur engagement ; tes enfants en jour de concours et toi pouvez courir avec eux.</li>
       <li><b>Box</b> : chaque box ouvre au fond sur un petit paddock ; les chevaux y sortent seuls dans la journée et rentrent le soir. Les portes de devant s’ouvrent quand on fait entrer ou sortir un cheval.</li>
