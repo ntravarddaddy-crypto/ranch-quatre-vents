@@ -4,7 +4,7 @@
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
 <script>if ("serviceWorker" in navigator) { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (avait) location.reload(); }); addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(reg => document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); }))); }</script>
-<script>window.VERSION_JEU = "2026-11-02 18:55";</script>
+<script>window.VERSION_JEU = "2026-11-02 19:03";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ranch des Quatre Vents</title>
@@ -3208,7 +3208,7 @@ function majCavalier(h, dt, vit, enLair) {
 let basileModele = null;
 function remplacerHumains() {
   construireActif(); construirePieton(); majResidents();
-  rafraichirCavaliers(); construireMarchands(); construirePalefreniers(); construireCuisiniere(); construireVente();
+  rafraichirCavaliers(); construireMarchands(); construirePalefreniers(); construireMoniteurs(); construireCuisiniere(); construireVente();
   if (basileModele && HUMAIN.pret && !basileModele.humain) { // Rémy peut arriver après Amy : une seule fois, et quand il est là
     scene.remove(basileModele);
     const h = humainReel({ veste: 0x2f6fb5, bas: 0x3d5a80, cheveux: 0x2a2420 }, 'Basile · Chevaux à vendre');
@@ -5057,6 +5057,103 @@ function majPalefreniers(dt) {
     q.cheval = c; q.chemin = cheminNav(q.x, q.z, pt.x, pt.z);
   }
 }
+// ---- Moniteurs (2026-11-02) : on les embauche aux Dortoirs (40 pièces par jour chacun) ; de 7 h à 18 h, ils s'occupent
+// des stagiaires à ta place, pour ce que tu leur confies (etat.tachesMoniteurs) : servir le petit-déjeuner et appeler à
+// table ceux qui ont faim (au menu choisi à la cantine, payé par toi), donner l'après-midi un cours au manège couvert
+// aux enfants qui n'ont pas encore monté (une heure de jeu : ils comptent comme ayant monté), et répondre « oui » aux
+// enfants qui viennent te parler quand tu ne leur réponds pas.
+const MONITEURS = [{ nom: 'Camille', genre: 'f', haut: 0xe67e22, cheveux: 0x6b4426 }, { nom: 'Maxime', genre: 'm', haut: 0x1aa39a, cheveux: 0x2a2420 }];
+const SALAIRE_MONITEUR = 40, PORTE_MANEGE = { x: 5, z: 42 };
+let monits = [], tDejAuto = 0, tRepasAuto = 0, tCoursAuto = 20;
+const mesMoniteurs = () => etat.moniteurs ||= [];
+const tachesMoniteurs = () => etat.tachesMoniteurs ||= { repas: true, cours: true, demandes: true };
+const aideMoniteur = tache => monits.length && tachesMoniteurs()[tache];
+function construireMoniteurs() {
+  for (const m of monits) { scene.remove(m.p.g); for (const e of m.cours?.enfants || []) finCoursEnfant(e, false); }
+  monits = mesMoniteurs().map((nom, i) => {
+    const d = MONITEURS.find(x => x.nom === nom) || MONITEURS[0], p = pieton(`${nom} · ${d.genre === 'f' ? 'monitrice' : 'moniteur'}`, d.haut, d.cheveux, d.genre);
+    const m = { nom, d, p, x: 16 + i * 3, z: 43, maison: { x: 16 + i * 3, z: 43 }, chemin: [], cours: null }; p.g.position.set(m.x, 0, m.z); scene.add(p.g); return m;
+  });
+}
+function finCoursEnfant(e, reussi) {
+  e.x = PORTE_MANEGE.x + rand(-1, 1); e.z = PORTE_MANEGE.z - 1; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z);
+  if (reussi) { const s = e.s; s.dernier = etat.jour; s.lecons++; s.humeur = clamp(s.humeur + 8, 0, 100); if (s.cheval?.stats) gagnerXp(s.cheval, 'lien', 3); }
+  if (enfantsDebout()) aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); else soir(e);
+}
+function servirDejAuto(m) {
+  const md = etat.menuDej ||= { dej: 'tartines', boisson: 'chocolat' }, liste = eleves.filter(e => e.etat === 'attendDej'), cout = (DEJ[md.dej].prix + BOISSONS[md.boisson].prix) * liste.length;
+  if (!liste.length) return;
+  if (etat.pieces < cout) { toast(`${m.nom} ne peut pas servir le petit-déjeuner : il faut ${cout} pièces`, 'rouge'); return; }
+  etat.pieces -= cout; for (const e of liste) { e.repas = { dej: md.dej, boisson: md.boisson }; servir(e); }
+  toast(`${m.nom} sert le petit-déjeuner à ${liste.map(e => e.nom).join(', ')} · −${cout} pièces`, 'or'); sauver();
+}
+function repasAuto(m) {
+  const menu = etat.menuCantine ||= { plat: 'pates', dessert: 'fruit' }, prix = PLATS[menu.plat].prix + DESSERTS[menu.dessert].prix;
+  const liste = eleves.filter(e => e.etat === 'attend' && peutManger(e) && (e.s.faim ?? 100) < 55); if (!liste.length) return;
+  if (etat.pieces < prix * liste.length) { toast(`${m.nom} ne peut pas payer le repas : il faut ${prix * liste.length} pièces`, 'rouge'); return; }
+  const partis = [];
+  for (const e of liste) { const i = placeLibre(); if (i == null) break; e.place_cantine = i; e.repas = { plat: menu.plat, dessert: menu.dessert }; aller(e, PLACES_CANTINE[i].x, PLACES_CANTINE[i].z, 'versCantine'); partis.push(e.nom); }
+  if (!partis.length) return;
+  etat.pieces -= prix * partis.length;
+  toast(`${m.nom} emmène ${partis.join(', ')} à la cantine : ${PLATS[menu.plat].nom.toLowerCase()} · −${prix * partis.length} pièces`, 'or'); sauver();
+}
+function commencerCoursMoniteur(m) {
+  const enfants = eleves.filter(e => e.etat === 'attend' && e.p.g.visible && e.s.dernier !== etat.jour && !jourDeConcours(e.s)).slice(0, 5);
+  if (!enfants.length) return false;
+  m.cours = { enfants, t: HEURE_S, commence: false };
+  m.chemin = cheminNav(m.x, m.z, PORTE_MANEGE.x, PORTE_MANEGE.z);
+  for (const e of enfants) aller(e, PORTE_MANEGE.x + rand(-1, 1), PORTE_MANEGE.z - rand(0, 1), 'versCoursMoniteur');
+  toast(`${m.nom} emmène ${enfants.map(e => e.nom).join(', ')} au manège couvert pour un cours`, 'or'); return true;
+}
+function majMoniteurs(dt) {
+  const jour = etat.heure >= 7 && etat.heure < 18;
+  for (const m of monits) {
+    const C = m.cours;
+    if (C) { // pendant le cours, tout le monde est dans le manège ; à la nuit tombée, on rentre
+      if (C.commence) { if ((C.t -= dt) <= 0 || !enfantsDebout()) { m.cours = null; m.p.g.visible = true; m.x = PORTE_MANEGE.x; m.z = PORTE_MANEGE.z; m.chemin = cheminNav(m.x, m.z, m.maison.x, m.maison.z); for (const e of C.enfants) if (e.etat === 'coursMoniteur') finCoursEnfant(e, C.t <= 0); toast(`Fin du cours de ${m.nom} : ${C.enfants.map(e => e.nom).join(', ')} ont monté aujourd’hui`, 'or'); sauver(); } continue; }
+      if (!m.chemin.length && C.enfants.every(e => e.etat !== 'versCoursMoniteur')) { C.commence = true; m.p.g.visible = false; }
+    }
+    m.p.g.visible = jour && !(C && C.commence) && Math.hypot(camera.position.x - m.x, camera.position.z - m.z) < 120;
+    if (m.chemin.length) {
+      const c = m.chemin[0], dx = c.x - m.x, dz = c.z - m.z, d = Math.hypot(dx, dz), v = 1.6;
+      if (d <= v * dt) { m.x = c.x; m.z = c.z; m.chemin.shift(); } else { m.x += dx / d * v * dt; m.z += dz / d * v * dt; m.p.g.rotation.y = Math.atan2(dx, dz); }
+      marcher(m.p, v, dt); m.p.g.position.set(m.x, 0, m.z);
+    } else { marcher(m.p, 0, dt); m.p.g.rotation.y += angleDiff(m.p.g.rotation.y, Math.PI) * Math.min(1, dt * 3); }
+  }
+  if (!jour || !monits.length || !enfantsDebout()) return;
+  const libre = monits.find(m => !m.cours) || monits[0], T = tachesMoniteurs();
+  if (T.repas) {
+    if (eleves.some(e => e.etat === 'attendDej')) { if ((tDejAuto += dt) > 15) { tDejAuto = 0; servirDejAuto(libre); } } else tDejAuto = 0;
+    if (etat.heure >= 11.75 && etat.heure < 17 && (tRepasAuto -= dt) <= 0) { tRepasAuto = 10; repasAuto(libre); }
+  }
+  if (T.cours && etat.heure >= 14 && etat.heure < 16.5 && !lecon && !balade && !concours && (tCoursAuto -= dt) <= 0) {
+    tCoursAuto = 25; const m = monits.find(x => !x.cours); if (m) commencerCoursMoniteur(m);
+  }
+}
+function payerMoniteurs() {
+  const l = mesMoniteurs(); if (!l.length) return;
+  const partis = [];
+  while (l.length && etat.pieces < l.length * SALAIRE_MONITEUR) partis.push(l.pop());
+  etat.pieces -= l.length * SALAIRE_MONITEUR;
+  if (l.length) setTimeout(() => toast(`Salaire de ${l.join(', ')} (moniteurs) : ${l.length * SALAIRE_MONITEUR} pièces`), 3800);
+  if (partis.length) { setTimeout(() => toast(`Pas assez de pièces : ${partis.join(', ')} ${partis.length > 1 ? 'sont partis' : 'est parti'}`, 'rouge'), 4000); construireMoniteurs(); }
+}
+function blocMoniteurs() {
+  const T = tachesMoniteurs();
+  const etatDe = m => m.cours ? `donne un cours à ${m.cours.enfants.map(e => e.nom).join(', ')}` : 'avec les enfants';
+  return `<h3 class="section">Moniteurs · ${SALAIRE_MONITEUR} pièces par jour chacun</h3>
+    <p class="note">De 7 h à 18 h, ils s’occupent de tes stagiaires à ta place. Coche ce que tu leur confies :</p>
+    <label class="choix"><input type="checkbox" data-tache="repas" ${T.repas ? 'checked' : ''}> Servir le petit-déjeuner et emmener à la cantine ceux qui ont faim (au menu que tu as choisi à la cantine)</label>
+    <label class="choix"><input type="checkbox" data-tache="cours" ${T.cours ? 'checked' : ''}> Donner un cours l’après-midi (14 h) aux enfants qui n’ont pas encore monté</label>
+    <label class="choix"><input type="checkbox" data-tache="demandes" ${T.demandes ? 'checked' : ''}> Répondre « oui » aux enfants qui veulent te parler, si tu ne leur réponds pas</label>
+    ${monits.length ? `<p class="note">${monits.map(m => `${m.nom} : ${etatDe(m)}`).join(' · ')}</p>` : ''}
+    <div class="boutons">${MONITEURS.map(d => mesMoniteurs().includes(d.nom) ? `<button class="btn" data-renvoyer-mon="${d.nom}">${d.nom} travaille ici · ${d.genre === 'f' ? 'la' : 'le'} renvoyer</button>` : `<button class="btn or" data-embaucher-mon="${d.nom}" ${etat.pieces >= SALAIRE_MONITEUR ? '' : 'disabled'}>Embaucher ${d.nom} (${d.genre === 'f' ? 'monitrice' : 'moniteur'})</button>`).join('')}</div>`;
+}
+function brancherMoniteurs(C, refaire) {
+  C.querySelectorAll('[data-tache]').forEach(b => b.onchange = () => { tachesMoniteurs()[b.dataset.tache] = b.checked; sauver(); });
+  C.querySelectorAll('[data-embaucher-mon]').forEach(b => b.onclick = () => { const d = MONITEURS.find(x => x.nom === b.dataset.embaucherMon); mesMoniteurs().push(d.nom); construireMoniteurs(); sauver(); toast(`${d.nom} est embauché${d.genre === 'f' ? 'e' : ''} : ${d.genre === 'f' ? 'elle' : 'il'} s’occupe des stagiaires de 7 h à 18 h`, 'or'); refaire(); });
+  C.querySelectorAll('[data-renvoyer-mon]').forEach(b => b.onclick = () => { const l = mesMoniteurs(); l.splice(l.indexOf(b.dataset.renvoyerMon), 1); construireMoniteurs(); sauver(); toast(`${b.dataset.renvoyerMon} est parti`); refaire(); });
+}
 function payerPalefreniers() {
   const l = mesPalefreniers(); if (!l.length) return;
   const partis = [];
@@ -5500,7 +5597,7 @@ let prochaineArrivee = 12, balade = null;
 const chevauxStage = [];
 const heureDeCours = () => etat.heure >= 8 && etat.heure < 19;
 const enfantsDebout = () => etat.heure >= 6.5 && etat.heure < 18; // ils sortent leurs chevaux au pré le matin, les rentrent le soir
-const occupe = s => lecon?.groupe.some(R => R.s === s) || balade?.groupe.some(R => R.s === s) || concours?.file.some(F => F.s === s);
+const occupe = s => monits.some(m => m.cours?.enfants.some(e => e.s === s)) || lecon?.groupe.some(R => R.s === s) || balade?.groupe.some(R => R.s === s) || concours?.file.some(F => F.s === s);
 const accord = (e, f, m) => e.genre === 'f' ? f : m;
 function chevalStagiaire(niveau) {
   const race = pick(niveau <= 2 ? ['Poney de selle', 'Haflinger', 'Cheval de la plaine'] : ['Selle Français', 'Quarter Horse', 'Arabe', 'Appaloosa', 'Pur-sang', 'Frison', 'Haflinger']);
@@ -5611,6 +5708,7 @@ function arriveeEleve(e, jour) {
       else { if (e.copain) { e.copain.meneur = null; e.copain = null; } aller(e, ATTENTE[e.place].x, ATTENTE[e.place].z, 'versBanc'); }
       break;
     case 'versPause': e.etat = 'pause'; e.p.g.visible = false; break;
+    case 'versCoursMoniteur': if (jour) { e.etat = 'coursMoniteur'; e.p.g.visible = false; } else soir(e); break;
   }
 }
 function majEleves(dt) {
@@ -5622,7 +5720,7 @@ function majEleves(dt) {
   vitresOccupees();
   const jour = enfantsDebout();
   for (const e of [...eleves]) {
-    if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours') continue;
+    if (e.etat === 'lecon' || e.etat === 'balade' || e.etat === 'concours' || e.etat === 'coursMoniteur') continue;
     if (e.etat === 'gite') { if (!jour) continue; e.x = PORTE_GITE.x; e.z = PORTE_GITE.z; e.p.g.visible = true; e.p.g.position.set(e.x, 0, e.z); matin(e); }
     if (e.etat === 'dort') { if (!jour) continue; lever(e); matin(e); } // le matin, il se lève et sort du dortoir
     if (e.etat === 'douche') { marcher(e.p, 0, dt); if ((e.tDouche -= dt) <= 0) { const d = e.douche; d.eau.visible = false; d.libre = true; e.douche = null; e.x = d.devant.x; e.z = d.devant.z; e.p.g.position.set(e.x, 0, e.z); const l = litDe(e); aller(e, l.pied.x, l.pied.z, 'versLit'); } continue; }
@@ -5665,8 +5763,8 @@ function majEleves(dt) {
 function majTemps(dt) {
   const avant = etat.heure;
   etat.heure += dt / HEURE_S;
-  if (avant < 7.5 && etat.heure >= 7.5 && etat.stagiaires.length) toast('Les enfants sortent leurs chevaux, puis vont à la cantine : sers-leur le petit-déjeuner (Cantine, K)', 'or');
-  if (avant < 12 && etat.heure >= 12 && etat.stagiaires.length) toast('Midi : les enfants ont faim. Appelle-les à la cantine (bouton Cantine, ou touche K)', 'or');
+  if (avant < 7.5 && etat.heure >= 7.5 && etat.stagiaires.length && !aideMoniteur('repas')) toast('Les enfants sortent leurs chevaux, puis vont à la cantine : sers-leur le petit-déjeuner (Cantine, K)', 'or');
+  if (avant < 12 && etat.heure >= 12 && etat.stagiaires.length && !aideMoniteur('repas')) toast('Midi : les enfants ont faim. Appelle-les à la cantine (bouton Cantine, ou touche K)', 'or');
   if (avant < 18 && etat.heure >= 18 && eleves.some(e => e.etat === 'attend')) toast('18 h : les enfants rentrent leurs chevaux au box, puis vont se doucher et se coucher aux dortoirs');
   if (avant < 6.5 && etat.heure >= 6.5 && etat.stagiaires.length) toast(`Jour ${etat.jour}, 6 h 30 : les enfants sortent leurs chevaux au pré`);
   if (etat.heure >= 24) { etat.heure -= 24; etat.jour++; nouveauJour(); }
@@ -5687,6 +5785,7 @@ function nouveauJour() {
   invitationsDuJour();
   for (const s of etat.stagiaires) s.faim = 60; // réveil : le petit-déjeuner se prend à la cantine
   payerPalefreniers();
+  payerMoniteurs();
   reproduction();
   if (etat.chevaux.some(c => c.naissance && etat.jour - c.naissance <= AGE_ADULTE + 1)) majResidents();
   const hier = etat.jour - 1, tristes = [], montes = [];
@@ -5711,6 +5810,7 @@ function dormir() {
   if (etat.heure >= 18) { etat.jour++; nouveauJour(); }
   etat.heure = 7; fermer();
   for (const c of etat.chevaux) if (c.lieu === 'box') { c.faim = Math.max(c.faim ?? 80, 70); c.soif = Math.max(c.soif ?? 80, 70); }
+  for (const m of monits) if (m.cours) { m.cours = null; m.chemin = []; m.x = m.maison.x; m.z = m.maison.z; }
   for (const e of eleves) if (!['part', 'lecon', 'balade', 'concours'].includes(e.etat)) { if (e.etat === 'dort') lever(e); coucher(e); } // dormir : tout le monde au lit, réveil au dortoir
   for (const s of etat.stagiaires) if (!occupe(s)) { const b = BOX_POS(s.box); etatsStage[s.nom] = { etat: 'box', x: b.x, z: b.z, rot: BOX_ROT(s.box), vit: 0 }; }
   construireChevauxStage();
@@ -5863,7 +5963,7 @@ function majCopain(c, dt) {
 function majDemande(e, dt) { // il vient vers toi, puis attend ta réponse ; au bout de 45 s, il renonce
   e.tDemande -= dt;
   const d = Math.hypot(J.x - e.x, J.z - e.z);
-  if (e.tDemande <= 0) { finirDemande(e, null); return; }
+  if (e.tDemande <= 0 || (e.tDemande < 20 && aideMoniteur('demandes') && !(ouvert() && e.questionPosee))) { finirDemande(e, aideMoniteur('demandes') ? 'moniteur' : null); return; }
   if (d < 2.6) { e.chemin = []; marcher(e.p, 0, dt); e.p.g.rotation.y = Math.atan2(J.x - e.x, J.z - e.z);
     if (!e.questionPosee && !ouvert()) { e.questionPosee = true; panneauDemande(e); } // la question s'affiche d'elle-même
     if (!e.bulleDemande) { e.bulleDemande = etiquette('Je peux te demander quelque chose ?', '#2f1f13', '#fbf1dc', 0.42); e.bulleDemande.position.y = 2.2; e.p.g.add(e.bulleDemande); } return; }
@@ -5875,6 +5975,7 @@ function finirDemande(e, reponse) {
   const d = e.demande; e.demande = null; e.visee = null; e.questionPosee = false;
   const dire = t => { const b = etiquette(t, '#2f1f13', '#fbf1dc', 0.42); b.position.y = 2.2; e.p.g.add(b); setTimeout(() => e.p.g.remove(b), 2600); };
   let parti = false;
+  if (reponse === 'moniteur') { const m = monits.find(x => !x.cours) || monits[0]; toast(`${m.nom} a répondu oui à ${e.nom} : « ${d.question} »`); reponse = 'oui'; }
   if (reponse === 'oui') {
     const [bonus, merci, info] = d.oui(e, goutsDe(e.nom), d); e.s.humeur = clamp(e.s.humeur + bonus, 0, 100); dire(merci); if (info) toast(info, 'or');
     parti = ['promene', 'versPause'].includes(e.etat);
@@ -5906,14 +6007,15 @@ function panneauGite() {
   const nuit = etat.heure >= 18 || etat.heure < 6;
   ouvrir(`<div class="pnj">Dortoirs · jour ${etat.jour}, ${heureTexte(etat.heure)}</div><h2>Tes stagiaires (cinq places)</h2>
     <p>Les stagiaires restent ${STAGE_JOURS} jours avec leur propre cheval. Donne-leur un cours collectif au manège couvert ou une balade sur le sentier du lac au moins une fois par jour : sinon leur humeur baisse. En partant, ils paient leur séjour selon leur humeur.</p>
+    ${blocMoniteurs()}
     <div class="grille">${fiches}</div>
     <div class="boutons" style="margin-top:14px"><button class="btn or" id="dormir" ${nuit ? '' : 'disabled'}>Dormir jusqu’à 7 h</button>${nuit ? '' : '<small style="align-self:center;color:var(--texte-doux)">On peut dormir à partir de 18 h</small>'}</div>`);
-  $('#dormir').onclick = dormir;
+  $('#dormir').onclick = dormir; brancherMoniteurs($('#contenu'), panneauGite);
 }
 // ---- Choisir les cavaliers d'un cours collectif ou d'une balade (jusqu'à cinq)
 function proposerLecon(e0) {
   if (lecon || balade || concours) { ouvrir(`<div class="pnj">Stagiaires</div><h2>${lecon ? 'Un cours' : concours ? 'Un concours' : 'Une sortie'} est déjà en cours</h2><p>Termine-le d’abord, puis reviens au banc.</p>`); return; }
-  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
+  const dispo = eleves.filter(e => e.p.g.visible && !['lecon', 'balade', 'concours', 'part', 'mange', 'versCantine', 'attendDej', 'versDej', 'pause', 'versPause', 'promene', 'copain', 'versCoursMoniteur', 'coursMoniteur'].includes(e.etat)); // tous les enfants debout, au banc ou en chemin
   const peutConcourir = e => jourDeConcours(e.s) && e.s.concoursJour !== etat.jour;
   const fiches = dispo.map((e, i) => {
     const c = e.s.cheval, f = ficheEleve(e.nom), n = niveauDe(f.niveau), j = jourDeStage(e.s);
@@ -7179,6 +7281,7 @@ function majMonde(dt, t) {
     else { o.tombe = Math.max(o.tombe, 0.01); o.barre.position.y += (0.08 - o.barre.position.y) * Math.min(1, dt * 6); o.barre.position.z = 0.6; o.barre.rotation.y = 0.15; }
   }
   majPalefreniers(dt);
+  majMoniteurs(dt);
   majCordes();
   for (const p of podiumPersos) marcher(p, 0, dt); // les gagnants sur le podium, au repos (sinon bras en croix)
   majDressageCarre(dt);
@@ -7405,7 +7508,7 @@ function demarrer(donnees = {}) {
   if (longe) finirLonge();
   if (balade) { for (const R of balade.groupe) scene.remove(R.m.g); balade = null; }
   if (concours) { if (concours.cav) scene.remove(concours.cav.m.g); concours = null; vueConcours = false; }
-  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); construireLieux(); if (!etat.invitationsVues) { etat.invitationsVues = true; nouvelleInvitation(1); }
+  mene = null; construire(); construireActif(); construirePieton(); reconstruireCarriere(); majResidents(); remettreStagiaires(); construirePalefreniers(); construireMoniteurs(); construireCuisiniere(); construireVente(); construireRing(); poserSelleExposee(); construireLieux(); if (!etat.invitationsVues) { etat.invitationsVues = true; nouvelleInvitation(1); }
   if (!etat.foireVue) { etat.foireVue = true; nouvelleFoire(etat.heure < 15 ? 0 : 1); setTimeout(() => toast(`Invitation à la Grande Foire des Ranchs, ${etat.foire.jour === etat.jour ? 'aujourd’hui' : 'demain'} ! Réponds dans le bouton Concours (J)`, 'or'), 9000); } J.endu = enduMax();
   if (!etat.pres.some(p => p.id === 'repro')) etat.pres.push(preRepro());
   if (!etat.pres.some(p => p.id === 'elevage')) etat.pres.push(preElevage());
@@ -7420,7 +7523,7 @@ function demarrer(donnees = {}) {
   if (!etat.vu) { etat.vu = true; aide(); }
 }
 // accès de test depuis la console du navigateur
-window.ranch = { get foireEnCours() { return foireEnCours; }, get enchere() { return enchere; }, panneauFoire, partirALaFoire, foireApresDemo, encherirJoueur, FOIRE,  get gerante() { return gerante; }, panneauGerante, EQUITALION, podiumEtPrix, get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
+window.ranch = { get monits() { return monits; }, panneauGite, commencerCoursMoniteur,  get foireEnCours() { return foireEnCours; }, get enchere() { return enchere; }, panneauFoire, partirALaFoire, foireApresDemo, encherirJoueur, FOIRE,  get gerante() { return gerante; }, panneauGerante, EQUITALION, podiumEtPrix, get concoursDr() { return concoursDr; }, lancerConcoursDressage, CARRES_DR, panneauRanchs, panneauInvitations, nouvelleInvitation, partirAuConcours, LIEUX_CONCOURS, panneauDressage, get dressageCarre() { return dressageCarre; }, FIGURES, ouvrirPoste, get posteActif() { return posteActif; }, lits, douches, lancerDemande, panneauDemande, panneauObstaclesVente, BRAS_LEVE, get acheteurs() { return acheteurs; }, get enchere() { return enchere; }, panneauVente, panneauCantine, J, camera, renderer, scene, camFixe: null, descendre, toucheMonter, amenager, cliquerBatir, basculerPorte, portes, aupresDuCheval, lacher, get mene() { return mene; }, set mene(v) { mene = v; }, majBesoins, POSTURE, HUMAIN, spectateurs, get basile() { return basileModele; }, REEL, get actifM() { return actifM; }, eleves, get lecon() { return lecon; }, get balade() { return balade; }, get concours() { return concours; }, cheminNav, construireNav, NAV, etatsStage, ouvrirPorteBox, portesBox, sellier, construireSellerie, reproduction, naissance, adulte, toitsCoupes, PRE_ENFANTS, get VOIT() { return VOIT; }, entrerVoiture, sortirVoiture, chargerVan, dechargerVan, chevauxDansVan, organiserOuvert, inscriptionRegional, etalMarche, MARCHANDS, joueurAFini, finirParcours, entreeEnfant, lancerConcours, panneauMaison, comptoir, panneauChamp, vendreCheval, prixVente, croissance, heureAbs, nouveauJour, creerEleve, arriveeStagiaire, panneauGite, dormir, commencerLecon, commencerBalade, finirBalade, majBornes, BORNES, SENTIER, majLumiere, GITE, PORTE_GITE, chevauxStage, proposerLecon, ordonner, tableauCarriere, soigner, majResidents, get residents() { return residents; }, get etat() { return etat; }, obstacles, parcours, touches, basculerParcours, apprivoiser, sauvages, dressage,
   rendu() { majCamera(1 / 60); ciel.position.copy(camera.position); renderer.render(scene, camera); },
   pas(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) { if (mini) mini.maj(dt); majCheval(dt); majMonde(dt, performance.now() / 1000); } } };
 window.claude?.hot?.snapshot?.(() => { sauver(); return { etat }; });
